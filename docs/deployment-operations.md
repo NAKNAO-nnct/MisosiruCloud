@@ -29,6 +29,7 @@
 | 1-9 | ノード状態表示 | ダッシュボードにノード状態表示 | ダッシュボード |
 | 1-10 | DB マイグレーション | 全テーブル作成 (s3_credentials, vps_gateways 含む) | マイグレーションファイル |
 | 1-11 | スニペットAPI コンテナ化 | FastAPI の Dockerfile + 各ノードにデプロイ | snippet-api コンテナ |
+| 1-12 | Queue Worker 設定 | database ドライバ + jobs テーブル + mgmt-queue コンテナ (php artisan queue:work) | キューワーカー |
 
 ### Phase 2: VM管理
 
@@ -422,6 +423,9 @@ S3_LOG_ARCHIVE_BUCKET=log-archives
 NOMAD_URL=http://nomad-server:4646
 NOMAD_TOKEN=
 
+# Queue (非同期ジョブ)
+QUEUE_CONNECTION=database
+
 # Grafana Cloud
 GRAFANA_CLOUD_URL=https://xxx.grafana.net
 GRAFANA_CLOUD_TOKEN=
@@ -476,11 +480,16 @@ docker compose restart
 
 # 特定サービスのみ再起動
 docker compose restart mgmt-app
+docker compose restart mgmt-queue
 docker compose restart s3-proxy
 
 # 設定変更を反映して再作成
 docker compose up -d --build mgmt-app
 ```
+
+> **mgmt-queue コンテナ:** mgmt-app と同じイメージを使い、entrypoint を
+> `php artisan queue:work --queue=provisioning --timeout=600 --tries=1 --sleep=3`
+> に差し替えたコンテナ。DB/環境変数は mgmt-app と共有する。
 
 ### 8.2 ログ確認
 
@@ -490,6 +499,7 @@ docker compose logs -f
 
 # 特定サービスのログ
 docker compose logs -f mgmt-app
+docker compose logs -f mgmt-queue
 docker compose logs -f s3-proxy
 docker compose logs -f dns
 ```
