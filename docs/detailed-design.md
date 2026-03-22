@@ -44,7 +44,7 @@
 | 管理DB | MySQL | 8.x | 最小限のメタデータのみ |
 | スニペットAPI | Python + FastAPI | Python 3.12+ | 各Proxmoxノードに Docker コンテナで配置 |
 | S3 プロキシ | Go (カスタム) | Go 1.22+ | S3互換、独自認証情報発行 |
-| 内部 DNS | CoreDNS | 最新 | スプリットホライズン対応 |
+| 内部 DNS | CoreDNS | 最新 | キャッシュ/フォワーダ |
 | コンテナ基盤 | Nomad + Consul | Nomad 1.9+ | マルチテナント |
 | レジストリ | Harbor | 2.x | 全テナント共有 |
 | オブジェクトストレージ | 外部 S3 (AWS S3 / Wasabi) | - | S3プロキシ経由でアクセス |
@@ -145,12 +145,11 @@ app/
 │   │       │   ├── Index.php
 │   │       │   ├── Store.php
 │   │       │   └── Update.php
-│   │       ├── Dns/
+│   │       ├── Dns/                 # DNS プロバイダ API 経由
 │   │       │   ├── Index.php
 │   │       │   ├── Store.php
 │   │       │   ├── Update.php
-│   │       │   ├── Destroy.php
-│   │       │   └── Reload.php
+│   │       │   └── Destroy.php
 │   │       └── Vps/
 │   │           ├── Index.php
 │   │           ├── Store.php
@@ -758,7 +757,7 @@ snippet-api/
 
 **バックアップ処理フロー (S3 プロキシ経由):**
 
-テナント VM は内部 S3 プロキシ (`s3-proxy.internal:9000`) 経由でバックアップをアップロードする。
+テナント VM は内部 S3 プロキシ (`s3.infra.example.com:9000`) 経由でバックアップをアップロードする。
 外部 S3 の認証情報はテナント VM には配布しない。
 
 ```
@@ -769,7 +768,7 @@ snippet-api/
     │
     ▼
    [aws cli / mc で S3 プロキシにアップロード]
-    │  エンドポイント: http://s3-proxy.internal:9000
+    │  エンドポイント: http://s3.infra.example.com:9000
     │  認証: テナント別の内部 Access Key / Secret Key
     │  パス: s3://dbaas-backups/{date}.sql.gz.gpg
     ▼
@@ -859,7 +858,7 @@ snippet-api/
     ▼
 [ContainerService: Nomad Job Spec 生成]
     │  ├── namespace: tenant-{tenant_id}
-    │  ├── image: registry.internal/{image}
+    │  ├── image: registry.infra.example.com/{image}
     │  ├── resources: CPU/Memory 制限
     │  ├── network: bridge (テナントVNet)
     │  └── service: Consul サービス登録
@@ -895,7 +894,7 @@ job "tenant-${tenant_id}-${app_name}" {
       driver = "docker"
 
       config {
-        image = "registry.internal:5000/${image}"
+        image = "registry.infra.example.com/${image}"
         ports = ["app"]
       }
 
@@ -1008,14 +1007,14 @@ job "traefik" {
 | 項目 | 値 |
 |------|---|
 | デプロイ先 | mgmt-docker VM (Docker Compose サービス) |
-| アクセスURL | https://registry.internal:443 (内部 DNS で解決) |
+| アクセスURL | https://registry.infra.example.com (内部 DNS で解決) |
 | ストレージバックエンド | 外部 S3 (s3://registry-storage) - S3プロキシ経由 |
 | 認証方式 | DB認証 (Harbor内蔵) |
 | テナント構成 | プロジェクト: tenant-{id} (push/pull) + library (pull-only) |
 
-> **DNS 活用:** 外部からも `registry.example.com` でアクセス可能な場合、
-> 内部 DNS のスプリットホライズンにより、クラスタ内 VM は `registry.example.com` を
-> ローカル IP (172.26.26.10) に解決する。グローバル経由のトラフィック迂回を防止。
+> **DNS 活用:** `registry.infra.example.com` は内部インフラゾーン (`infra.example.com`) の A レコードで
+> 172.26.26.10 に解決される。クラスタ内 VM は CoreDNS 経由で直接ローカルの Harbor にアクセスする。
+> Let's Encrypt (DNS-01、さくら DNS API) で取得した `*.infra.example.com` 証明書を使用。
 
 ---
 
@@ -1148,41 +1147,54 @@ LOG_LEVEL=info
 
 ---
 
-## 9. 内部 DNS (CoreDNS) 設計
+## 9. DNS 設計
 
 ### 9.1 概要
 
-クラスタ内の全 VM・コンテナが参照する内部 DNS サーバ。CoreDNS を Docker コンテナとして稼働させ、
-内部サービスの名前解決とスプリットホライズン DNS を提供する。
+`.internal` 等の非公開 TLD は **Let's Encrypt 証明書を取得できない** ため使用しない。
+すべてのサービスに実ドメインを割り当て、DNS-01 チャレンジで証明書を発行する。
+
+DNS を **グローバル用** (`example.com` — Cloudflare) と **内部インフラ用** (`infra.example.com` — さくらのクラウド DNS 等) に分離する。
+CoreDNS はキャッシュ/フォワーダとして動作し、独自ゾーンは持たない。
 
 ### 9.2 ユースケース
 
-| ユースケース | ドメイン例 | 解決先 |
-|------------|----------|--------|
-| 内部サービス参照 | `s3-proxy.internal` | 172.26.26.10 |
-| レジストリアクセス (内部) | `registry.internal` | 172.26.26.10 |
-| レジストリアクセス (スプリットホライズン) | `registry.example.com` | 172.26.26.10 (内部では) |
-| スニペット API | `snippet-api-pve1.internal` | 172.26.26.11 |
-| 外部ドメイン | `google.com` | 8.8.8.8 へ転送 |
+| ユースケース | ドメイン例 | 解決先 | DNS プロバイダ |
+|------------|----------|--------|--------------|
+| 内部サービス参照 | `s3.infra.example.com` | 172.26.26.10 | さくら DNS |
+| レジストリアクセス | `registry.infra.example.com` | 172.26.26.10 | さくら DNS |
+| CaaS コンテナ (ワイルドカード) | `myapp.containers.example.com` | VPS Global IP | Cloudflare |
+| スニペット API | `snippet-pve1.infra.example.com` | 172.26.26.11 | さくら DNS |
+| 外部ドメイン | `google.com` | 8.8.8.8 へ転送 | (パブリック) |
 
 ### 9.3 レコード管理
 
-DNS レコードは **設定ファイルベース** で管理する (DB 管理はしない)。
-mgmt-app の管理画面からレコードを編集する場合、設定ファイルを書き換えて CoreDNS をリロードする。
+内部インフラゾーン (`infra.example.com`) のレコードは **外部 DNS プロバイダの API** で管理する。
+mgmt-app の管理画面からレコードを編集する場合、DNS プロバイダ API を呼び出す。
 
 ```
 # レコード変更フロー
 [管理画面: DNS 管理画面]
     │  レコード追加/変更/削除
     ▼
-[mgmt-app: ホストファイル生成]
-    │  internal.hosts / override.hosts を生成
+[mgmt-app: DNS プロバイダ API 呼び出し]
+    │  さくら DNS API / Cloudflare API
     ▼
-[Docker volume 経由でファイル更新]
-    │
+[DNS プロバイダ: レコード反映]
+    │  TTL 経過後にグローバルに伝播
     ▼
-[CoreDNS: auto-reload (2秒間隔でファイル変更検知)]
+[CoreDNS: キャッシュ TTL 経過後に新しいレコードを取得]
 ```
+
+### 9.4 SSL/TLS 証明書 (Let's Encrypt)
+
+DNS-01 チャレンジを使用し、すべての証明書を Let's Encrypt で取得する。
+
+| 対象 | ドメイン | DNS-01 プロバイダ | 備考 |
+|------|--------|------------------|------|
+| 内部サービス全般 | `*.infra.example.com` | さくら DNS API | ワイルドカード1枚で全カバー |
+| CaaS コンテナ | `*.containers.example.com` | Cloudflare API | VPS で取得 |
+| 公開サイト | `example.com`, `*.example.com` | Cloudflare API | VPS で取得 |
 
 ---
 

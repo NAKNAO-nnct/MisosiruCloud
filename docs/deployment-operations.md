@@ -21,7 +21,7 @@
 | 1-1 | Docker Compose 構成 | mgmt-docker VM に docker-compose.yml 作成 | Compose ファイル |
 | 1-2 | mgmt-app コンテナ構築 | Laravel 12 + PHP-FPM + Nginx の Dockerfile 作成 | mgmt-app イメージ |
 | 1-3 | mgmt-db 起動 | MySQL 8.4 コンテナ起動 | DB コンテナ |
-| 1-4 | 内部 DNS (CoreDNS) 起動 | Corefile + hosts ファイル作成 → コンテナ起動 | DNS コンテナ |
+| 1-4 | 内部 DNS (CoreDNS) 起動 | Corefile 作成 → コンテナ起動 (キャッシュ/フォワーダ) | DNS コンテナ |
 | 1-5 | S3 プロキシ構築 | Go S3 プロキシ Dockerfile 作成 + ビルド | s3-proxy イメージ |
 | 1-6 | 認証機能 | ログイン + 2FA (TOTP, 任意) | 認証画面 |
 | 1-7 | Lib/Proxmox 実装 | Proxmox API クライアント | ライブラリ |
@@ -83,7 +83,7 @@
 | # | タスク | 詳細 | 成果物 |
 |---|--------|------|--------|
 | 6-1 | VPS リバースプロキシ | 各 VPS に nginx ドメインベースルーティング、VPS管理API配置 | VPS設定 |
-| 6-2 | SSL証明書 | Let's Encrypt + 自動更新 | 証明書管理 |
+| 6-2 | SSL証明書 (Let's Encrypt DNS-01) | Cloudflare API (`*.containers.example.com` 等) + さくら DNS API (`*.infra.example.com`) | 証明書管理 |
 | 6-3 | ファイアウォール整備 | nftables ルール整備 | FWルール |
 | 6-4 | 監査ログ | 全操作の記録 | 監査機能 |
 | 6-5 | アラート設定 | Grafana Cloud アラート | アラートルール |
@@ -158,7 +158,7 @@ S3 プロキシは mgmt-docker VM の Docker Compose に含まれるため、`do
 curl http://172.26.26.10:9000/  # S3互換エンドポイント
 
 # テスト (aws cli)
-aws --endpoint-url http://s3-proxy.internal:9000 \
+aws --endpoint-url http://s3.infra.example.com:9000 \
     s3 ls s3://dbaas-backups/ \
     --access-key INTERNAL_ACCESS_KEY \
     --secret-key INTERNAL_SECRET_KEY
@@ -169,13 +169,14 @@ aws --endpoint-url http://s3-proxy.internal:9000 \
 CoreDNS は mgmt-docker VM の Docker Compose に含まれるため、`docker compose up -d` で自動起動する。
 
 ```bash
-# 動作確認
-dig @172.26.26.10 s3-proxy.internal
+# 動作確認 (内部インフラドメイン — 外部 DNS 経由で解決)
+dig @172.26.26.10 s3.infra.example.com
 # Expected: 172.26.26.10
 
-dig @172.26.26.10 registry.example.com
-# Expected: 172.26.26.10 (スプリットホライズン)
+dig @172.26.26.10 registry.infra.example.com
+# Expected: 172.26.26.10
 
+# 外部ドメインのフォワード確認
 dig @172.26.26.10 google.com
 # Expected: フォワーダ経由で正常解決
 ```
@@ -199,7 +200,7 @@ set -euo pipefail
 
 DB_TYPE="${DB_TYPE}"           # mysql / postgres / redis
 GPG_PASSPHRASE="${GPG_PASSPHRASE}"
-S3_PROXY_ENDPOINT="${S3_PROXY_ENDPOINT}"   # http://s3-proxy.internal:9000
+S3_PROXY_ENDPOINT="${S3_PROXY_ENDPOINT}"   # http://s3.infra.example.com:9000
 S3_ACCESS_KEY="${S3_ACCESS_KEY}"            # S3プロキシ発行の内部キー
 S3_SECRET_KEY="${S3_SECRET_KEY}"            # S3プロキシ発行の内部シークレット
 S3_BUCKET="${S3_BUCKET}"                   # dbaas-backups
@@ -274,7 +275,7 @@ docker compose exec mgmt-db mysqldump --single-transaction misosiru_cloud | gzip
   > /tmp/mgmt-backup-$(date +%Y%m%d).sql.gz
 
 # S3 プロキシ経由で外部 S3 にアップロード
-aws --endpoint-url http://s3-proxy.internal:9000 \
+aws --endpoint-url http://s3.infra.example.com:9000 \
   s3 cp /tmp/mgmt-backup-$(date +%Y%m%d).sql.gz \
   s3://mgmt-backups/$(date +%Y%m%d).sql.gz
 rm /tmp/mgmt-backup-*.sql.gz
@@ -453,7 +454,7 @@ LOG_LEVEL=info
 ```env
 DB_TYPE=mysql                    # mysql / postgres / redis
 GPG_PASSPHRASE=<backup_encryption_key>
-S3_PROXY_ENDPOINT=http://s3-proxy.internal:9000
+S3_PROXY_ENDPOINT=http://s3.infra.example.com:9000
 S3_ACCESS_KEY=<S3プロキシ発行の内部キー>
 S3_SECRET_KEY=<S3プロキシ発行の内部シークレット>
 S3_BUCKET=dbaas-backups

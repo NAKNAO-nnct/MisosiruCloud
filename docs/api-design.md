@@ -135,13 +135,15 @@
 
 ### 2.11 DNS 管理
 
+内部インフラゾーン (`infra.example.com`) のレコードは外部 DNS プロバイダ API (さくらのクラウド DNS 等) で管理する。
+管理画面から DNS プロバイダ API を呼び出してレコードの CRUD を行う。
+
 | メソッド | パス | Controller | 説明 | 権限 |
 |---------|------|-----------|------|------|
-| GET | /admin/dns | Admin\Dns\Index | DNS レコード一覧 | admin |
-| POST | /admin/dns | Admin\Dns\Store | DNS レコード追加 | admin |
-| PUT | /admin/dns/{id} | Admin\Dns\Update | DNS レコード更新 | admin |
-| DELETE | /admin/dns/{id} | Admin\Dns\Destroy | DNS レコード削除 | admin |
-| POST | /admin/dns/reload | Admin\Dns\Reload | CoreDNS 設定リロード | admin |
+| GET | /admin/dns | Admin\Dns\Index | DNS レコード一覧 (API経由で取得) | admin |
+| POST | /admin/dns | Admin\Dns\Store | DNS レコード追加 (API経由で作成) | admin |
+| PUT | /admin/dns/{id} | Admin\Dns\Update | DNS レコード更新 (API経由で更新) | admin |
+| DELETE | /admin/dns/{id} | Admin\Dns\Destroy | DNS レコード削除 (API経由で削除) | admin |
 
 ### 2.12 VPS ゲートウェイ管理
 
