@@ -49,7 +49,7 @@
 | レジストリ | Harbor | 2.x | 全テナント共有 |
 | オブジェクトストレージ | 外部 S3 (AWS S3 / Wasabi) | - | S3プロキシ経由でアクセス |
 | 監視 | OTel Collector + Grafana Cloud | - | メトリクス/ログ/トレース |
-| コンテナ管理 | Docker Compose | v2 | インフラサービスのオーケストレーション |
+| コンテナ管理 | Docker Compose | v2 | インフラサービスのオーケストレーション (compose.yaml / compose.prod.yaml) |
 
 ---
 
@@ -1235,7 +1235,7 @@ job "traefik" {
 
 | 項目 | 値 |
 |------|---|
-| デプロイ先 | mgmt-docker VM (Docker Compose サービス) |
+| デプロイ先 | mgmt-docker VM (Compose サービス) |
 | アクセスURL | https://registry.infra.example.com (内部 DNS で解決) |
 | ストレージバックエンド | 外部 S3 (s3://registry-storage) - S3プロキシ経由 |
 | 認証方式 | DB認証 (Harbor内蔵) |

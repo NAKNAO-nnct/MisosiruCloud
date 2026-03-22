@@ -18,7 +18,7 @@
 
 | # | タスク | 詳細 | 成果物 |
 |---|--------|------|--------|
-| 1-1 | Docker Compose 構成 | mgmt-docker VM に docker-compose.yml 作成 | Compose ファイル |
+| 1-1 | Compose 構成 | mgmt-docker VM に compose.yaml + compose.prod.yaml 作成 | Compose ファイル |
 | 1-2 | mgmt-app コンテナ構築 | Laravel 12 + PHP-FPM + Nginx の Dockerfile 作成 | mgmt-app イメージ |
 | 1-3 | mgmt-db 起動 | MySQL 8.4 コンテナ起動 | DB コンテナ |
 | 1-4 | 内部 DNS (CoreDNS) 起動 | Corefile 作成 → コンテナ起動 (キャッシュ/フォワーダ) | DNS コンテナ |
@@ -112,12 +112,12 @@ cd misosiru-cloud
 cp .env.example .env
 # DB_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY 等を設定
 
-# 5. Docker Compose 起動
-docker compose up -d
+# 5. Docker Compose 起動 (本番)
+docker compose -f compose.prod.yaml up -d
 
 # 6. Laravel 初期設定
-docker compose exec mgmt-app php artisan key:generate
-docker compose exec mgmt-app php artisan migrate --force
+docker compose -f compose.prod.yaml exec mgmt-app php artisan key:generate
+docker compose -f compose.prod.yaml exec mgmt-app php artisan migrate --force
 
 # 7. 動作確認
 curl -k https://172.26.26.10/login
@@ -150,9 +150,9 @@ docker run -d \
 curl http://172.26.26.11:8100/health
 ```
 
-### 2.3 S3 プロキシ (Docker Compose 内)
+### 2.3 S3 プロキシ (Compose 内)
 
-S3 プロキシは mgmt-docker VM の Docker Compose に含まれるため、`docker compose up -d` で自動起動する。
+S3 プロキシは mgmt-docker VM の compose.prod.yaml に含まれるため、`docker compose -f compose.prod.yaml up -d` で自動起動する。
 
 ```bash
 # 動作確認
@@ -165,9 +165,9 @@ aws --endpoint-url http://s3.infra.example.com:9000 \
     --secret-key INTERNAL_SECRET_KEY
 ```
 
-### 2.4 内部 DNS (Docker Compose 内)
+### 2.4 内部 DNS (Compose 内)
 
-CoreDNS は mgmt-docker VM の Docker Compose に含まれるため、`docker compose up -d` で自動起動する。
+CoreDNS は mgmt-docker VM の compose.prod.yaml に含まれるため、`docker compose -f compose.prod.yaml up -d` で自動起動する。
 
 ```bash
 # 動作確認 (内部インフラドメイン — 外部 DNS 経由で解決)
@@ -268,11 +268,11 @@ echo "Backup uploaded to S3 proxy: ${S3_BUCKET}/${DB_ID}/${DATE}.gpg"
 ### 3.2 管理DB バックアップ
 
 ```bash
-# 管理DBのバックアップ (mgmt-docker VM 内の Docker Compose 環境から実行)
+# 管理DBのバックアップ (mgmt-docker VM 内の Compose 環境から実行)
 # Laravel スケジューラ: 毎日 02:00
 
 # mgmt-db コンテナで dump を実行
-docker compose exec mgmt-db mysqldump --single-transaction misosiru_cloud | gzip \
+docker compose -f compose.prod.yaml exec mgmt-db mysqldump --single-transaction misosiru_cloud | gzip \
   > /tmp/mgmt-backup-$(date +%Y%m%d).sql.gz
 
 # S3 プロキシ経由で外部 S3 にアップロード
@@ -392,7 +392,7 @@ rm /tmp/mgmt-backup-*.sql.gz
 
 ## 7. 環境変数一覧
 
-### 7.1 Docker Compose (.env)
+### 7.1 Compose .env
 
 mgmt-docker VM のプロジェクトルートに配置する `.env` ファイル。
 
@@ -441,6 +441,10 @@ MYSQL_ROOT_PASSWORD=
 MYSQL_DATABASE=misosiru_cloud
 MYSQL_USER=misosiru
 MYSQL_PASSWORD=
+
+# === Compose (本番イメージ) ===
+REGISTRY=registry.infra.example.com/misosiru
+TAG=latest
 ```
 
 ### 7.2 Snippet API (各 Proxmox ノード)
@@ -476,15 +480,16 @@ DB_ID=<database_instance_id>
 cd /opt/misosiru-cloud
 
 # 全サービス再起動
-docker compose restart
+docker compose -f compose.prod.yaml restart
 
 # 特定サービスのみ再起動
-docker compose restart mgmt-app
-docker compose restart mgmt-queue
-docker compose restart s3-proxy
+docker compose -f compose.prod.yaml restart mgmt-app
+docker compose -f compose.prod.yaml restart mgmt-queue
+docker compose -f compose.prod.yaml restart s3-proxy
 
-# 設定変更を反映して再作成
-docker compose up -d --build mgmt-app
+# イメージ更新して再作成
+docker compose -f compose.prod.yaml pull
+docker compose -f compose.prod.yaml up -d
 ```
 
 > **mgmt-queue コンテナ:** mgmt-app と同じイメージを使い、entrypoint を
@@ -495,27 +500,26 @@ docker compose up -d --build mgmt-app
 
 ```bash
 # 全サービスのログ
-docker compose logs -f
+docker compose -f compose.prod.yaml logs -f
 
 # 特定サービスのログ
-docker compose logs -f mgmt-app
-docker compose logs -f mgmt-queue
-docker compose logs -f s3-proxy
-docker compose logs -f dns
+docker compose -f compose.prod.yaml logs -f mgmt-app
+docker compose -f compose.prod.yaml logs -f mgmt-queue
+docker compose -f compose.prod.yaml logs -f s3-proxy
+docker compose -f compose.prod.yaml logs -f dns
 ```
 
 ### 8.3 アップデート手順
 
 ```bash
 cd /opt/misosiru-cloud
-git pull origin main
 
-# イメージ再ビルド + 再起動
-docker compose build
-docker compose up -d
+# 新しいイメージをプル + 再起動
+docker compose -f compose.prod.yaml pull
+docker compose -f compose.prod.yaml up -d
 
 # Laravel マイグレーション
-docker compose exec mgmt-app php artisan migrate --force
+docker compose -f compose.prod.yaml exec mgmt-app php artisan migrate --force
 ```
 
 ### 8.4 mgmt-docker VM 障害時
@@ -526,5 +530,5 @@ docker compose exec mgmt-app php artisan migrate --force
 3. 管理パネル、S3 プロキシ、DNS が自動復旧
 4. 復旧しない場合:
    a. ssh mgmt-docker
-   b. cd /opt/misosiru-cloud && docker compose up -d
+   b. cd /opt/misosiru-cloud && docker compose -f compose.prod.yaml up -d
 ```
