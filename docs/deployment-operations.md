@@ -58,9 +58,10 @@
 |---|--------|------|--------|
 | 4-1 | Nomad クラスタ構築 | Server 3台 + Worker VM | Nomadクラスタ |
 | 4-2 | Consul クラスタ構築 | サービスディスカバリ | Consulクラスタ |
-| 4-3 | Harbor デプロイ | コンテナレジストリ構築 (mgmt-docker VM の Docker Compose) | Harbor |
+| 4-3 | Traefik デプロイ | Nomad system job、Consul Catalog連携 | Traefik Ingress |
+| 4-4 | Harbor デプロイ | コンテナレジストリ構築(mgmt-docker VM の Docker Compose) | Harbor |
 | 4-4 | Lib/Nomad 実装 | Nomad API クライアント | ライブラリ |
-| 4-5 | コンテナデプロイ画面 | イメージ指定 → Job生成 → 登録 | デプロイ画面 |
+| 4-5 | コンテナデプロイ画面 | イメージ指定・ドメイン指定 → Job生成(Traefik tags付き) → 登録 | デプロイ画面 |
 | 4-6 | テナント隔離 | Namespace + CNI bridge + EVPN/VXLAN | ネットワーク隔離 |
 | 4-7 | コンテナ管理画面 | 一覧・詳細・ログ・スケール | 管理画面 |
 

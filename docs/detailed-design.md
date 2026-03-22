@@ -833,6 +833,7 @@ snippet-api/
 ┌─────────┐  ┌─────────┐  ┌─────────┐
 │Worker VM│  │Worker VM│  │Worker VM│
 │ Docker  │  │ Docker  │  │ Docker  │
+│ Traefik │  │ Traefik │  │ Traefik │
 │ cAdvisor│  │ cAdvisor│  │ cAdvisor│
 │ OTel    │  │ OTel    │  │ OTel    │
 └─────────┘  └─────────┘  └─────────┘
@@ -912,12 +913,97 @@ job "tenant-${tenant_id}-${app_name}" {
       name = "${app_name}"
       port = "app"
       provider = "consul"
+
+      tags = [
+        "traefik.enable=true",
+        "traefik.http.routers.${app_name}.rule=Host(`${domain}`)",
+        "traefik.http.routers.${app_name}.entrypoints=web",
+      ]
     }
   }
 }
 ```
 
-### 6.5 コンテナレジストリ (Harbor)
+> **ポイント:** Consul サービスの `tags` に Traefik のルーティングルールを指定する。
+> Traefik が Consul Catalog を watch し、サービスの追加・削除・ポート変更を自動検知してルーティングを更新する。
+> テナントがポート番号を意識する必要はない。
+
+### 6.5 Traefik (Ingress Proxy)
+
+Nomad ワーカー上のコンテナへの HTTP/HTTPS アクセスを Consul Catalog ベースで自動ルーティングする。
+Nomad system job として全ワーカーにデプロイする。
+
+| 項目 | 値 |
+|------|---|
+| デプロイ方式 | Nomad system job (全 Worker に 1 インスタンス) |
+| ルーティングソース | Consul Catalog (tags ベース) |
+| エントリポイント | web (80), websecure (443) |
+| ダッシュボード | :8080 (Traefik Dashboard, 内部のみ) |
+
+**Nomad Job Spec (Traefik system job):**
+
+```hcl
+job "traefik" {
+  datacenters = ["dc1"]
+  type = "system"
+
+  group "traefik" {
+    network {
+      mode = "host"
+      port "http" { static = 80 }
+      port "https" { static = 443 }
+      port "dashboard" { static = 8080 }
+    }
+
+    task "traefik" {
+      driver = "docker"
+
+      config {
+        image = "traefik:v3"
+        network_mode = "host"
+        volumes = ["/opt/traefik:/etc/traefik"]
+      }
+
+      template {
+        data = <<-EOF
+          [entryPoints]
+            [entryPoints.web]
+              address = ":80"
+            [entryPoints.websecure]
+              address = ":443"
+
+          [api]
+            dashboard = true
+            insecure = true
+
+          [providers.consulCatalog]
+            prefix = "traefik"
+            exposedByDefault = false
+            [providers.consulCatalog.endpoint]
+              address = "127.0.0.1:8500"
+        EOF
+        destination = "local/traefik.toml"
+      }
+
+      resources {
+        cpu    = 200
+        memory = 128
+      }
+    }
+  }
+}
+```
+
+**トラフィックフロー:**
+
+```
+[外部ユーザ] → [VPS nginx (domain routing)] → WireGuard
+    → [Transit VM] → [Nomad Worker VM]
+        → [Traefik :80/443] → Consul Catalog 参照
+            → [コンテナ (dynamic port)]
+```
+
+### 6.6 コンテナレジストリ (Harbor)
 
 | 項目 | 値 |
 |------|---|

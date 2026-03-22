@@ -84,12 +84,16 @@
 |---------|------|-----------|------|------|
 | GET | /containers | Container\Index | コンテナ一覧 | all |
 | GET | /containers/deploy | Container\Create | デプロイ画面 | admin, tenant_admin |
-| POST | /containers | Container\Store | デプロイ処理 | admin, tenant_admin |
+| POST | /containers | Container\Store | デプロイ処理 (Traefik tags 自動生成) | admin, tenant_admin |
 | GET | /containers/{id} | Container\Show | コンテナ詳細 | all(自テナント) |
 | POST | /containers/{id}/restart | Container\Restart | 再起動 | admin, tenant_admin |
 | POST | /containers/{id}/scale | Container\Scale | スケール変更 | admin, tenant_admin |
 | DELETE | /containers/{id} | Container\Destroy | 削除 | admin, tenant_admin |
 | GET | /containers/{id}/logs | Container\Logs | ログ表示 | all(自テナント) |
+
+> **Traefik 連携:** `Container\Store` はデプロイ時にユーザが指定したドメイン名を
+> Consul サービスタグ (`traefik.http.routers.{name}.rule=Host(...)`) として Nomad Job に埋め込む。
+> Traefik が Consul Catalog を watch し、コンテナへのルーティングを自動反映する。
 
 ### 2.7 ネットワーク管理
 

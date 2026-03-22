@@ -197,6 +197,7 @@ Nomad ジョブとテナントの紐付けメタデータ。
 | nomad_job_id | VARCHAR(255) | NO | - | Nomad Job ID |
 | name | VARCHAR(255) | NO | - | 表示名 |
 | image | VARCHAR(500) | NO | - | コンテナイメージ |
+| domain | VARCHAR(255) | YES | NULL | 公開ドメイン名 (Traefik ルーティング用) |
 | replicas | INT UNSIGNED | NO | 1 | レプリカ数 |
 | cpu_mhz | INT UNSIGNED | NO | - | CPU制限 (MHz) |
 | memory_mb | INT UNSIGNED | NO | - | メモリ制限 (MB) |

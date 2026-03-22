@@ -799,6 +799,8 @@ EVPN を使用するため、テナント作成時に Transit VM 側の設定変
 
 ### 11.1 nginx でのドメインベースルーティング (各 VPS ごと)
 
+**VM 直接ルーティング (汎用 VM / DBaaS):**
+
 ```nginx
 # /etc/nginx/conf.d/tenant-routing.conf
 
@@ -818,6 +820,40 @@ server {
     }
 }
 ```
+
+**CaaS (Nomad) コンテナルーティング → Traefik 経由:**
+
+Nomad 上のコンテナは動的ポートが割り当てられるため、VPS nginx は Nomad Worker 上の **Traefik (:80)** にプロキシする。Traefik が Consul Catalog を参照して正しいコンテナにルーティングする。
+
+```nginx
+# CaaS コンテナ用: Nomad Worker の Traefik へ転送
+upstream nomad_workers {
+    # Nomad Worker VM の IP (vmbr1 / 172.26.27.x)
+    server 172.26.27.20:80;
+    server 172.26.27.21:80;
+    server 172.26.27.22:80;
+}
+
+server {
+    listen 443 ssl;
+    server_name *.containers.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://nomad_workers;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+> **ポイント:** VPS nginx は「どのコンテナにどのポートで転送するか」を知る必要がない。
+> Host ヘッダを保持して Traefik に転送すれば、Traefik が Consul Catalog のタグに基づいて
+> 正しいコンテナ (動的ポート) にルーティングする。
 
 ### 11.2 nginx stream でのTCP/UDPプロキシ
 

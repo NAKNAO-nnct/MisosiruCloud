@@ -289,6 +289,7 @@ docker run -d \
 | Nomad Server | 3 | 各ノードに1台ずつ | Raft合意のため奇数台 |
 | Nomad Worker | 3+ | 各ノードに1台以上 | テナントの需要に応じてスケール |
 | Consul Server | 3 | Nomad Server と同居可 | サービスディスカバリ |
+| Traefik | 3+ | Nomad system job (全 Worker) | Consul Catalog ベース Ingress Proxy |
 
 ---
 
