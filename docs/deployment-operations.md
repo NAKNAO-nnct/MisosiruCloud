@@ -8,7 +8,9 @@
 |---|--------|------|--------|
 | 0-1 | Proxmox クラスタ構成 | 3ノードクラスタの構築・確認 | 動作するクラスタ |
 | 0-2 | ネットワーク基盤 | vmbr0(管理)/vmbr1(VM) の設定 | ブリッジ設定 |
-| 0-3 | Cloud-init テンプレートVM | Ubuntu 24.04 cloud image をテンプレート化 | テンプレートVM |
+| 0-3 | Packer テンプレートビルド | Packer で Ubuntu 24.04 ベーステンプレート生成 | テンプレートVM (base-ubuntu) |
+| 0-3a | DBaaS テンプレートビルド | Packer で MySQL/PostgreSQL/Redis テンプレート生成 | テンプレートVM (dbaas-*) |
+| 0-3b | Nomad Worker テンプレートビルド | Packer で Nomad Worker テンプレート生成 | テンプレートVM (nomad-worker) |
 | 0-4 | 外部 S3 バケット準備 | AWS S3 / Wasabi でバケット作成・IAM設定 | S3 バケット・認証情報 |
 | 0-5 | VPS-WireGuard接続確認 | 各 VPS ↔ Transit VM 間のVPN確認 (VPSごとに個別トンネル) | WireGuard設定 |
 | 0-6 | Docker 環境整備 | mgmt-docker VM に Docker + Docker Compose インストール | Docker 基盤 |
@@ -123,7 +125,66 @@ docker compose -f compose.prod.yaml exec mgmt-app php artisan migrate --force
 curl -k https://172.26.26.10/login
 ```
 
-### 2.2 snippet-api (各Proxmoxノード/Docker)
+### 2.2 Packer テンプレートビルド
+
+開発マシンまたは CI から実行する。Proxmox API にアクセスできるネットワーク環境が必要。
+
+```bash
+# 1. Packer インストール (未インストールの場合)
+# https://developer.hashicorp.com/packer/install
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt-get update && sudo apt-get install -y packer
+
+# 2. Proxmox に Packer 用 API トークン作成 (初回のみ)
+# Proxmox Web UI → Datacenter → Permissions → API Tokens
+# ユーザ: packer@pve, トークン: packer-token
+# 必要な権限: VM.Allocate, VM.Clone, VM.Config.*, VM.Monitor,
+#             VM.Audit, Datastore.AllocateSpace, Datastore.Audit,
+#             Sys.Modify (ISO upload), SDN.Use
+
+# 3. Packer プラグインインストール
+cd packer/
+packer init .
+
+# 4. 変数ファイル作成
+cat > auto.pkrvars.hcl << 'EOF'
+proxmox_url      = "https://pve1.infra.example.com:8006/api2/json"
+proxmox_username = "packer@pve!packer-token"
+proxmox_token    = "<APIトークンシークレット>"
+proxmox_node     = "pve1"
+ssh_password     = "<ビルド用一時パスワード>"
+EOF
+
+# 5. Ubuntu 24.04 ISO をアップロード (初回のみ)
+# Proxmox Web UI → pve1 → local → ISO Images → Upload
+# または:
+# wget https://releases.ubuntu.com/24.04/ubuntu-24.04-live-server-amd64.iso
+# scp ubuntu-24.04-live-server-amd64.iso root@pve1:/var/lib/vz/template/iso/
+
+# 6. ベーステンプレートビルド
+packer build -var-file=auto.pkrvars.hcl base-ubuntu.pkr.hcl
+
+# 7. 派生テンプレートビルド (base-ubuntu 完了後)
+packer build -var-file=auto.pkrvars.hcl dbaas-mysql.pkr.hcl
+packer build -var-file=auto.pkrvars.hcl dbaas-postgres.pkr.hcl
+packer build -var-file=auto.pkrvars.hcl dbaas-redis.pkr.hcl
+packer build -var-file=auto.pkrvars.hcl nomad-worker.pkr.hcl
+
+# 8. テンプレート確認
+pvesh get /nodes/pve1/qemu --output-format json | jq '.[] | select(.template==1) | {vmid, name}'
+# Expected:
+# {"vmid": 9000, "name": "tmpl-base-ubuntu"}
+# {"vmid": 9010, "name": "tmpl-dbaas-mysql"}
+# {"vmid": 9011, "name": "tmpl-dbaas-postgres"}
+# {"vmid": 9012, "name": "tmpl-dbaas-redis"}
+# {"vmid": 9020, "name": "tmpl-nomad-worker"}
+```
+
+> **テンプレート更新時:** 同じコマンドを再実行すれば、既存テンプレートを新しいものに置き換えられる。
+> 既存 VM はフルクローンのため影響を受けない。
+
+### 2.3 snippet-api (各Proxmoxノード/Docker)
 
 ```bash
 # 1. 各Proxmoxノードに Docker をインストール (未インストールの場合)
@@ -150,7 +211,7 @@ docker run -d \
 curl http://172.26.26.11:8100/health
 ```
 
-### 2.3 S3 プロキシ (Compose 内)
+### 2.4 S3 プロキシ (Compose 内)
 
 S3 プロキシは mgmt-docker VM の compose.prod.yaml に含まれるため、`docker compose -f compose.prod.yaml up -d` で自動起動する。
 
@@ -165,7 +226,7 @@ aws --endpoint-url http://s3.infra.example.com:9000 \
     --secret-key INTERNAL_SECRET_KEY
 ```
 
-### 2.4 内部 DNS (Compose 内)
+### 2.5 内部 DNS (Compose 内)
 
 CoreDNS は mgmt-docker VM の compose.prod.yaml に含まれるため、`docker compose -f compose.prod.yaml up -d` で自動起動する。
 

@@ -745,21 +745,346 @@ CoreDNS は独自ゾーンを持たない。
 
 ---
 
-## 7. Cloud-init テンプレート設計
+## 7. テンプレート VM 設計 (Packer + Cloud-init)
 
-### 7.1 テンプレート一覧
+### 7.1 概要
 
-| テンプレート名 | 用途 | 設定内容 |
-|-------------|------|---------|
-| base-ubuntu | 基本 Ubuntu VM | ユーザ作成、SSH鍵、timezone、**内部DNS設定**、node_exporter |
-| dbaas-mysql | MySQL DBaaS | base + MySQL インストール・設定・ユーザ作成・**S3プロキシへのバックアップ設定** |
-| dbaas-postgres | PostgreSQL DBaaS | base + PostgreSQL インストール・設定・ユーザ作成・**S3プロキシへのバックアップ設定** |
-| dbaas-redis | Redis DBaaS | base + Redis インストール・設定・**S3プロキシへのバックアップ設定** |
-| nomad-worker | Nomad Worker | base + Docker + Nomad agent + cAdvisor |
+テンプレート VM は **Packer** (proxmox-clone ビルダー) で自動生成する。
+Ubuntu 24.04 cloud image をベースに、用途別のプロビジョニングを Packer で実行し、
+Proxmox テンプレート (Read-Only) として保存する。
 
-### 7.2 DNS 設定 (全テンプレート共通)
+**メリット:**
+- テンプレート作成が再現可能・冪等 (`packer build` で同じテンプレートを何度でも生成)
+- バージョンアップ時に新テンプレートを作って差し替え可能
+- 手順書の「手動でこのコマンドを実行」がなくなる
 
-全ての Cloud-init テンプレートに以下の DNS 設定を含める。
+### 7.2 ディレクトリ構成
+
+```
+packer/
+├── base-ubuntu.pkr.hcl          # ベーステンプレート定義
+├── dbaas-mysql.pkr.hcl          # MySQL DBaaS テンプレート
+├── dbaas-postgres.pkr.hcl       # PostgreSQL DBaaS テンプレート
+├── dbaas-redis.pkr.hcl          # Redis DBaaS テンプレート
+├── nomad-worker.pkr.hcl         # Nomad Worker テンプレート
+├── variables.pkr.hcl            # 共通変数定義
+├── http/
+│   └── user-data                # Packer ビルド用の初回 cloud-init (autoinstall)
+└── scripts/
+    ├── base.sh                  # 共通セットアップ (ユーザ, SSH, timezone, DNS, node_exporter)
+    ├── cleanup.sh               # テンプレート化前のクリーンアップ
+    ├── mysql.sh                 # MySQL インストール + 初期設定
+    ├── postgres.sh              # PostgreSQL インストール + 初期設定
+    ├── redis.sh                 # Redis インストール + 初期設定
+    └── nomad-worker.sh          # Docker + Nomad agent + cAdvisor
+```
+
+### 7.3 テンプレート一覧
+
+| テンプレート名 | VMID 範囲 | ベース | Packer でインストールするもの |
+|-------------|----------|--------|---------------------------|
+| base-ubuntu | 9000 | Ubuntu 24.04 cloud image | qemu-guest-agent, node_exporter, 共通ユーザ設定 |
+| dbaas-mysql | 9010 | base-ubuntu クローン | MySQL 8.4 パッケージ |
+| dbaas-postgres | 9011 | base-ubuntu クローン | PostgreSQL 17 パッケージ |
+| dbaas-redis | 9012 | base-ubuntu クローン | Redis 7.x パッケージ |
+| nomad-worker | 9020 | base-ubuntu クローン | Docker, Nomad agent, cAdvisor |
+
+> **Packer vs Cloud-init の役割分担:**
+> - **Packer (ビルド時):** パッケージインストール、バイナリ配置など**時間がかかる共通処理**
+> - **Cloud-init (デプロイ時):** IP 設定、DB ユーザ/パスワード作成、テナント固有設定など**インスタンス固有の処理**
+
+### 7.4 Packer テンプレート例 (base-ubuntu)
+
+```hcl
+# base-ubuntu.pkr.hcl
+packer {
+  required_plugins {
+    proxmox = {
+      version = ">= 1.2.0"
+      source  = "github.com/hashicorp/proxmox"
+    }
+  }
+}
+
+source "proxmox-iso" "base-ubuntu" {
+  proxmox_url              = var.proxmox_url
+  username                 = var.proxmox_username
+  token                    = var.proxmox_token
+  node                     = var.proxmox_node
+  insecure_skip_tls_verify = true
+
+  iso_file    = "local:iso/ubuntu-24.04-live-server-amd64.iso"
+  unmount_iso = true
+
+  vm_id                = 9000
+  vm_name              = "tmpl-base-ubuntu"
+  template_description = "Base Ubuntu 24.04 template (Packer built)"
+  qemu_agent           = true
+
+  cores  = 2
+  memory = 2048
+
+  scsi_controller = "virtio-scsi-single"
+  disks {
+    type         = "scsi"
+    disk_size    = "2G"
+    storage_pool = "local-lvm"
+  }
+
+  network_adapters {
+    model  = "virtio"
+    bridge = "vmbr0"
+  }
+
+  cloud_init             = true
+  cloud_init_storage_pool = "local-lvm"
+
+  http_directory = "http"
+  boot_command = [
+    "<esc><wait>",
+    "e<down><down><down><end>",
+    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
+    "<F10>"
+  ]
+  boot_wait = "5s"
+
+  ssh_username = "packer"
+  ssh_password = var.ssh_password
+  ssh_timeout  = "15m"
+}
+
+build {
+  sources = ["source.proxmox-iso.base-ubuntu"]
+
+  provisioner "shell" {
+    scripts = [
+      "scripts/base.sh",
+      "scripts/cleanup.sh",
+    ]
+  }
+}
+```
+
+### 7.5 Packer テンプレート例 (dbaas-mysql)
+
+```hcl
+# dbaas-mysql.pkr.hcl
+source "proxmox-clone" "dbaas-mysql" {
+  proxmox_url              = var.proxmox_url
+  username                 = var.proxmox_username
+  token                    = var.proxmox_token
+  node                     = var.proxmox_node
+  insecure_skip_tls_verify = true
+
+  clone_vm_id          = 9000   # base-ubuntu テンプレート
+  vm_id                = 9010
+  vm_name              = "tmpl-dbaas-mysql"
+  template_description = "MySQL 8.4 DBaaS template (Packer built)"
+
+  cores  = 2
+  memory = 2048
+  qemu_agent = true
+
+  ssh_username = "packer"
+  ssh_password = var.ssh_password
+  ssh_timeout  = "10m"
+}
+
+build {
+  sources = ["source.proxmox-clone.dbaas-mysql"]
+
+  provisioner "shell" {
+    scripts = [
+      "scripts/mysql.sh",
+      "scripts/cleanup.sh",
+    ]
+  }
+}
+```
+
+> **dbaas-postgres, dbaas-redis, nomad-worker** も同じパターンで
+> `clone_vm_id = 9000` からクローンし、用途別スクリプトを実行する。
+
+### 7.6 共通変数定義
+
+```hcl
+# variables.pkr.hcl
+variable "proxmox_url" {
+  type    = string
+  default = "https://pve1.infra.example.com:8006/api2/json"
+}
+
+variable "proxmox_username" {
+  type    = string
+  default = "packer@pve!packer-token"
+}
+
+variable "proxmox_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "proxmox_node" {
+  type    = string
+  default = "pve1"
+}
+
+variable "ssh_password" {
+  type      = string
+  sensitive = true
+}
+```
+
+### 7.7 プロビジョニングスクリプト例
+
+```bash
+# scripts/base.sh
+#!/bin/bash
+set -euxo pipefail
+
+# パッケージ更新
+apt-get update && apt-get upgrade -y
+
+# 共通パッケージ
+apt-get install -y \
+  qemu-guest-agent \
+  curl \
+  jq \
+  gpg \
+  awscli
+
+# タイムゾーン
+timedatectl set-timezone Asia/Tokyo
+
+# node_exporter (Prometheus メトリクス)
+useradd --no-create-home --shell /bin/false node_exporter || true
+curl -fsSL https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-amd64.tar.gz \
+  | tar xz --strip-components=1 -C /usr/local/bin/ node_exporter-1.8.2.linux-amd64/node_exporter
+cat <<'EOF' > /etc/systemd/system/node_exporter.service
+[Unit]
+Description=Node Exporter
+After=network.target
+[Service]
+User=node_exporter
+ExecStart=/usr/local/bin/node_exporter
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable node_exporter
+
+# cloud-init で上書きされるため、ここでは DNS 設定しない
+```
+
+```bash
+# scripts/mysql.sh
+#!/bin/bash
+set -euxo pipefail
+
+# MySQL 8.4 インストール
+apt-get install -y mysql-server-8.4
+
+# サービス無効化 (cloud-init で設定後に起動する)
+systemctl stop mysql
+systemctl disable mysql
+```
+
+```bash
+# scripts/cleanup.sh
+#!/bin/bash
+set -euxo pipefail
+
+# Packer ビルドユーザ削除 (cloud-init で正式ユーザを作成する)
+# ※ SSH 切断後に実行されるため最後に配置
+
+# ログクリア
+truncate -s 0 /var/log/*.log || true
+journalctl --vacuum-time=1s
+
+# machine-id リセット (クローン時に再生成される)
+truncate -s 0 /etc/machine-id
+rm -f /var/lib/dbus/machine-id
+
+# cloud-init クリーンアップ (次回起動時に再実行させる)
+cloud-init clean --logs
+
+# apt キャッシュ削除
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+# 一時ファイル
+rm -rf /tmp/* /var/tmp/*
+
+# Bash history
+unset HISTFILE
+rm -f /root/.bash_history /home/*/.bash_history
+
+sync
+```
+
+### 7.8 ビルドフロー
+
+```
+[開発者: packer build]
+    │
+    ▼
+[Packer: proxmox-iso ビルダー]
+    │  1. Ubuntu 24.04 ISO から VM 作成
+    │  2. autoinstall で OS 自動インストール
+    │  3. SSH 接続 → scripts/base.sh 実行
+    │  4. scripts/cleanup.sh 実行
+    │  5. VM → テンプレート変換
+    ▼
+[Proxmox: テンプレート VM (VMID 9000)]
+    │  tmpl-base-ubuntu (Read-Only)
+    │
+    ▼
+[Packer: proxmox-clone ビルダー (並列可能)]
+    ├── dbaas-mysql (9010):  clone 9000 → scripts/mysql.sh → テンプレート化
+    ├── dbaas-postgres (9011): clone 9000 → scripts/postgres.sh → テンプレート化
+    ├── dbaas-redis (9012):  clone 9000 → scripts/redis.sh → テンプレート化
+    └── nomad-worker (9020): clone 9000 → scripts/nomad-worker.sh → テンプレート化
+
+[管理パネル: clone 時に template_vmid を指定]
+    └── POST /nodes/{node}/qemu/9000/clone   (汎用 VM)
+    └── POST /nodes/{node}/qemu/9010/clone   (MySQL DBaaS)
+    └── POST /nodes/{node}/qemu/9011/clone   (PostgreSQL DBaaS)
+    └── ...
+```
+
+### 7.9 テンプレート更新運用
+
+テンプレートの更新 (OS パッチ、DB バージョンアップなど) は以下の手順で行う:
+
+1. `packer build` で新しいテンプレートを一時 VMID (例: 9100) に作成
+2. 動作確認 (手動でクローンしてテスト)
+3. 旧テンプレートを削除、新テンプレートの VMID を正規 VMID にリネーム
+   - または管理 DB の `proxmox_nodes.template_vmid` を新 VMID に更新
+4. 以後の VM 作成は新テンプレートからクローンされる
+
+> 既存 VM は影響を受けない (フルクローンのため)。
+
+---
+
+## 8. Cloud-init (デプロイ時設定)
+
+### 8.1 Cloud-init の役割
+
+Packer でテンプレート化された VM をクローンした後、**インスタンス固有の設定** を Cloud-init で注入する。
+
+| 設定項目 | Cloud-init で注入 | 理由 |
+|---------|------------------|------|
+| IP アドレス | network-config.yaml | インスタンスごとに異なる |
+| ホスト名 | meta-data.yaml | インスタンスごとに異なる |
+| SSH 公開鍵 | user-data.yaml | テナント/ユーザごとに異なる |
+| DNS 参照先 | user-data.yaml | 全 VM 共通だがテンプレートに焼かない (変更可能性) |
+| DB ユーザ/パスワード | user-data.yaml | DBaaS インスタンスごとに異なる |
+| DB 設定ファイル | user-data.yaml | スペック・チューニングがインスタンスごとに異なる |
+| バックアップ cron | user-data.yaml | S3 認証情報がテナントごとに異なる |
+
+### 8.2 DNS 設定 (全テンプレート共通)
+
+全ての Cloud-init user-data に以下の DNS 設定を含める。
 
 ```yaml
 # cloud-config (抜粋)
@@ -775,9 +1100,8 @@ resolv_conf:
 > **効果:** VM 起動時に `/etc/resolv.conf` が CoreDNS を参照するよう自動設定される。
 > `s3.infra.example.com`, `registry.infra.example.com` 等の実ドメインが正しく解決される。
 > CoreDNS がキャッシュするため、外部 DNS への問い合わせ回数を削減できる。
-| nomad-worker | Nomad Worker | base + Docker + Nomad agent + cAdvisor |
 
-### 7.2 スニペットファイル配置フロー
+### 8.3 スニペットファイル配置フロー
 
 ```
 [管理パネル (Laravel)]
@@ -797,7 +1121,7 @@ resolv_conf:
 
 ---
 
-## 8. 構成図（ネットワークトポロジ）
+## 9. 構成図（ネットワークトポロジ）
 
 ```
                         ┌──────────────┐

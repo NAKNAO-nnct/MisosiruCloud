@@ -50,6 +50,7 @@
 | オブジェクトストレージ | 外部 S3 (AWS S3 / Wasabi) | - | S3プロキシ経由でアクセス |
 | 監視 | OTel Collector + Grafana Cloud | - | メトリクス/ログ/トレース |
 | コンテナ管理 | Docker Compose | v2 | インフラサービスのオーケストレーション (compose.yaml / compose.prod.yaml) |
+| VM テンプレート | Packer | 1.11+ | Proxmox ビルダーでテンプレート VM 生成 |
 
 ---
 
