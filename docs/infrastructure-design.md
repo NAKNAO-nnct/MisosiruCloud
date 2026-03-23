@@ -81,7 +81,7 @@ vmbr1  : VM ネットワーク（172.26.27.0/24）
 | OS | Alpine Linux 3.20+ |
 | 構成 | Active-Standby 2台 (VRRP冗長化) |
 | 主要ソフトウェア | FRR (BGP), WireGuard, Keepalived, nftables |
-| IP (Active) | 172.26.27.2, VIP: 172.26.27.1, wg0: 10.255.0.2 |
+| IP (Active) | 172.26.27.2, VIP: 172.26.27.254, wg0: 10.255.0.2 |
 | IP (Standby) | 172.26.27.3, wg0: 10.255.0.3 |
 | 役割 | テナントサブネットの L3 ゲートウェイ、VPS-WireGuard 接続、BGP 経路広告 |
 | BGP | AS 65001 ↔ VPS (AS 65000)。テナント追加時に経路を自動広告 |
