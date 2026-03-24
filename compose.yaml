@@ -1,0 +1,40 @@
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    volumes:
+      - ./:/var/www
+      - ./storage:/var/www/storage
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - ${COMPOSE_APP_HTTP_PORT:-8000}:80
+      - ${COMPOSE_APP_HTTPS_PORT:-8001}:443
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: database
+      MYSQL_USER: docker
+      MYSQL_PASSWORD: docker
+      MYSQL_ROOT_PASSWORD: docker
+      TZ: Asia/Tokyo
+    command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - ${COMPOSE_DB_PORT:-3306}:3306
+    volumes:
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/data:/var/lib/mysql
+      - ./docker/mysql/log:/var/log/mysql
+
+  redis:
+    image: redis:latest
+    ports:
+      - ${COMPOSE_REDIS_PORT:-6379}:6379
