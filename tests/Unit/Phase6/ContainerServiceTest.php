@@ -8,6 +8,7 @@ use App\Models\ContainerJob;
 use App\Models\Tenant;
 use App\Services\ContainerService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -115,4 +116,52 @@ test('terminateContainer purges nomad job and deletes container job record', fun
 
     Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/v1/job/tenant-c-worker'));
+});
+
+test('deployContainer stores env vars encrypted at rest', function (): void {
+    $tenant = Tenant::factory()->create([
+        'slug' => 'tenant-env',
+        'nomad_namespace' => 'tenant-env',
+    ]);
+
+    Http::fake([
+        'http://nomad.local:4646/v1/namespaces' => Http::response([
+            ['Name' => 'default'],
+        ], 200),
+        'http://nomad.local:4646/v1/namespace' => Http::response(['Name' => 'tenant-env'], 200),
+        'http://nomad.local:4646/v1/jobs' => Http::response(['EvalID' => 'eval-env'], 200),
+    ]);
+
+    $service = app()->make(ContainerService::class);
+
+    $job = $service->deployContainer(
+        tenant: App\Data\Tenant\TenantData::of($tenant),
+        params: [
+            'name' => 'api',
+            'image' => 'nginx:stable',
+            'replicas' => 1,
+            'cpu_mhz' => 300,
+            'memory_mb' => 256,
+            'env_vars' => [
+                'APP_KEY' => 'secret-value',
+                'APP_ENV' => 'production',
+            ],
+        ],
+    );
+
+    $stored = ContainerJob::query()->findOrFail($job->getId());
+    $decrypted = json_encode([
+        'APP_KEY' => 'secret-value',
+        'APP_ENV' => 'production',
+    ], JSON_UNESCAPED_SLASHES);
+
+    expect($stored->env_vars_encrypted)->toBe($decrypted);
+
+    $rawCiphertext = DB::table('container_jobs')
+        ->where('id', $stored->id)
+        ->value('env_vars_encrypted');
+
+    expect($rawCiphertext)
+        ->toBeString()
+        ->not->toBe($decrypted);
 });

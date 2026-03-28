@@ -103,7 +103,7 @@ class ContainerService
     {
         $this->ensureNomadConfigured();
 
-        $allocations = $this->nomadApi->job()->getJobAllocations($job->getNomadJobId());
+        $allocations = $this->getAllocations($job);
 
         if (empty($allocations)) {
             return '';
@@ -117,6 +117,29 @@ class ContainerService
         }
 
         return $this->nomadApi->job()->getJobLogs($allocId, $taskName);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getAllocations(ContainerJobData $job): array
+    {
+        $this->ensureNomadConfigured();
+
+        return $this->nomadApi->job()->getJobAllocations($job->getNomadJobId());
+    }
+
+    public function getContainerStatus(ContainerJobData $job): string
+    {
+        $allocations = $this->getAllocations($job);
+
+        if ($allocations === []) {
+            return 'unknown';
+        }
+
+        $first = $allocations[0];
+
+        return (string) ($first['ClientStatus'] ?? 'unknown');
     }
 
     /**

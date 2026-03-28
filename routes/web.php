@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\ContainerStatusController as ApiContainerStatus;
 use App\Http\Controllers\Api\DbaasStatusController as ApiDbaasStatus;
 use App\Http\Controllers\Api\NodeStatusController as ApiNodeStatus;
 use App\Http\Controllers\Api\VmStatusController as ApiVmStatus;
 use App\Http\Controllers\Container\CreateController as ContainerCreate;
+use App\Http\Controllers\Container\DestroyController as ContainerDestroy;
 use App\Http\Controllers\Container\IndexController as ContainerIndex;
+use App\Http\Controllers\Container\LogsController as ContainerLogs;
+use App\Http\Controllers\Container\RestartController as ContainerRestart;
+use App\Http\Controllers\Container\ScaleController as ContainerScale;
+use App\Http\Controllers\Container\ShowController as ContainerShow;
 use App\Http\Controllers\Container\StoreController as ContainerStore;
 use App\Http\Controllers\Dashboard\IndexController as DashboardIndex;
 use App\Http\Controllers\Dbaas\BackupController as DbaasBackup;
@@ -113,6 +119,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::get('/', ContainerIndex::class)->name('index');
             Route::get('/deploy', ContainerCreate::class)->name('create');
             Route::post('/', ContainerStore::class)->name('store');
+            Route::get('/{container}', ContainerShow::class)->name('show');
+            Route::post('/{container}/restart', ContainerRestart::class)->name('restart');
+            Route::post('/{container}/scale', ContainerScale::class)->name('scale');
+            Route::delete('/{container}', ContainerDestroy::class)->name('destroy');
+            Route::get('/{container}/logs', ContainerLogs::class)->name('logs');
         });
 
         Route::prefix('proxmox-clusters')->name('proxmox-clusters.')->group(function (): void {
@@ -131,6 +142,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         Route::get('vms/{vmid}/status', ApiVmStatus::class)->name('vms.status');
         Route::get('nodes/status', ApiNodeStatus::class)->name('nodes.status');
         Route::get('dbaas/{database}/status', ApiDbaasStatus::class)->name('dbaas.status');
+        Route::get('containers/{container}/status', ApiContainerStatus::class)->name('containers.status');
     });
 });
 

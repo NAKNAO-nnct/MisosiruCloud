@@ -17,6 +17,7 @@
                 <flux:table.column>イメージ</flux:table.column>
                 <flux:table.column>ドメイン</flux:table.column>
                 <flux:table.column>レプリカ</flux:table.column>
+                <flux:table.column></flux:table.column>
             </flux:table.columns>
             <flux:table.rows>
                 @forelse ($jobs as $job)
@@ -27,10 +28,13 @@
                         <flux:table.cell>{{ $job->getImage() }}</flux:table.cell>
                         <flux:table.cell>{{ $job->getDomain() ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $job->getReplicas() }}</flux:table.cell>
+                        <flux:table.cell>
+                            <flux:button href="{{ route('containers.show', $job->getId()) }}" size="sm" variant="ghost">詳細</flux:button>
+                        </flux:table.cell>
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="6" class="text-center text-zinc-500">コンテナジョブがありません。</flux:table.cell>
+                        <flux:table.cell colspan="7" class="text-center text-zinc-500">コンテナジョブがありません。</flux:table.cell>
                     </flux:table.row>
                 @endforelse
             </flux:table.rows>
