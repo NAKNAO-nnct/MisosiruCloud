@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Data\User\AuthUserData;
+use App\Lib\Nomad\Client as NomadClient;
+use App\Lib\Nomad\NomadApi;
 use App\Lib\Proxmox\Client as ProxmoxClient;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Models\ProxmoxNode;
@@ -23,6 +25,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(NomadApi::class, function (): ?NomadApi {
+            $address = (string) config('services.nomad.address', '');
+            $token = (string) config('services.nomad.token', '');
+
+            if ($address === '' || $token === '') {
+                return null;
+            }
+
+            $client = new NomadClient(
+                address: $address,
+                token: $token,
+                verifyTls: (bool) config('services.nomad.verify_tls', false),
+            );
+
+            return new NomadApi($client);
+        });
+
         $this->app->singleton(ProxmoxApi::class, function (): ?ProxmoxApi {
             $node = ProxmoxNode::where('is_active', true)->first();
 

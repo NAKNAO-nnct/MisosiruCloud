@@ -39,4 +39,11 @@ return [
         'sdn_zone' => env('PROXMOX_SDN_ZONE'),
     ],
 
+    'nomad' => [
+        'address' => env('NOMAD_ADDR'),
+        'token' => env('NOMAD_TOKEN'),
+        'verify_tls' => env('NOMAD_VERIFY_TLS', false),
+        'datacenter' => env('NOMAD_DATACENTER', 'dc1'),
+    ],
+
 ];
