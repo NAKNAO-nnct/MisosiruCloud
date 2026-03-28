@@ -1,0 +1,1352 @@
+# Transit VM ↔ VPS 間 WireGuard VPN 構築手順書
+
+## 1. 概要
+
+本ドキュメントは、Transit VM と外部 VPS 間の WireGuard VPN トンネルを構築するための詳細手順を記載する。
+全ての手順にコマンド例を含む。
+
+### 1.1 前提条件
+
+| 項目 | 値 |
+|------|---|
+| Transit VM OS | Alpine Linux 3.20+ |
+| VPS OS | Ubuntu 24.04 / Debian 12 (例) |
+| Transit VM 管理 IP | 172.26.26.x (eth0) |
+| Transit VM VM Network IP | 172.26.27.2 (eth1, Active) / 172.26.27.3 (Standby) |
+| VPS Global IP | 各 VPS ごとに異なる |
+| WireGuard サブネット | 10.255.{vps_id}.0/24 (VPS ごとに固有) |
+| WireGuard ポート | Transit VM: 51820 + N / VPS: 51820 |
+
+### 1.2 ネットワーク構成図
+
+```
+                    Internet
+                       │
+          ┌────────────┼────────────┐
+          │            │            │
+   ┌──────┴───────┐  ┌┴─────────┐  │
+   │ VPS #1       │  │ VPS #2   │  ...
+   │ 203.0.113.10 │  │ 198.51.100.20
+   │ wg0:         │  │ wg0:     │
+   │ 10.255.1.1   │  │ 10.255.2.1
+   └──────┬───────┘  └┬─────────┘
+          │            │
+          │ WireGuard  │ WireGuard
+          │ :51820     │ :51820
+          │            │
+   ┌──────┴────────────┴──────────┐
+   │ Transit VM (Active)          │
+   │ eth0: 172.26.26.x (管理NW)  │
+   │ eth1: 172.26.27.2 (VM NW)   │
+   │ wg0:  10.255.1.2 (→VPS #1)  │
+   │ wg1:  10.255.2.2 (→VPS #2)  │
+   │ ListenPort: 51820, 51821    │
+   └──────────────────────────────┘
+```
+
+---
+
+## 2. Transit VM 側のセットアップ
+
+### 2.1 WireGuard のインストール (Alpine Linux)
+
+```bash
+# パッケージインストール
+apk update
+apk add wireguard-tools iptables nftables
+
+# カーネルモジュール確認 (Alpine 3.20+ ではデフォルトで利用可能)
+modprobe wireguard
+lsmod | grep wireguard
+```
+
+### 2.2 カーネルパラメータの設定
+
+IP フォワーディングと conntrack の設定を行う。
+
+```bash
+cat > /etc/sysctl.d/99-transit.conf << 'EOF'
+# IP フォワーディング有効化
+net.ipv4.ip_forward = 1
+
+# リバースパスフィルタ緩和 (非対称ルーティング対応)
+net.ipv4.conf.all.rp_filter = 2
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.eth1.rp_filter = 2
+
+# conntrack テーブルサイズ
+net.netfilter.nf_conntrack_max = 65536
+EOF
+
+# 即時反映
+sysctl -p /etc/sysctl.d/99-transit.conf
+
+# 確認
+sysctl net.ipv4.ip_forward
+# → net.ipv4.ip_forward = 1
+```
+
+### 2.3 鍵ペアの生成
+
+**各 VPS との接続ごとに個別の鍵ペアを生成する。**
+
+```bash
+# 鍵格納ディレクトリの作成
+mkdir -p /etc/wireguard
+chmod 700 /etc/wireguard
+
+# VPS #1 用の鍵ペア生成
+wg genkey | tee /etc/wireguard/transit-vps1-privatekey | wg pubkey > /etc/wireguard/transit-vps1-publickey
+chmod 600 /etc/wireguard/transit-vps1-privatekey
+
+# VPS #2 用の鍵ペア生成
+wg genkey | tee /etc/wireguard/transit-vps2-privatekey | wg pubkey > /etc/wireguard/transit-vps2-publickey
+chmod 600 /etc/wireguard/transit-vps2-privatekey
+
+# 公開鍵の確認 (VPS 側に伝える値)
+cat /etc/wireguard/transit-vps1-publickey
+cat /etc/wireguard/transit-vps2-publickey
+```
+
+> **セキュリティ:** 秘密鍵は絶対に外部に漏らさない。公開鍵のみを対向に伝える。
+
+### 2.4 WireGuard 設定ファイルの作成
+
+#### VPS #1 用 (wg0)
+
+```bash
+cat > /etc/wireguard/wg0.conf << 'EOF'
+[Interface]
+PrivateKey = <TRANSIT_VM_VPS1_PRIVATE_KEY>
+Address = 10.255.1.2/24
+ListenPort = 51820
+MTU = 1420
+Table = off
+
+# ルーティング設定
+PostUp = ip route add 10.255.1.0/24 dev wg0
+PostDown = ip route del 10.255.1.0/24 dev wg0
+
+[Peer]
+# VPS #1 の公開鍵
+PublicKey = <VPS1_PUBLIC_KEY>
+# VPS #1 のグローバル IP
+Endpoint = 203.0.113.10:51820
+# VPS 側のトンネル IP + 全テナントサブネット (サマリ)
+AllowedIPs = 10.255.1.1/32, 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
+
+chmod 600 /etc/wireguard/wg0.conf
+```
+
+**設定項目の解説:**
+
+| 項目 | 値 | 説明 |
+|------|---|------|
+| `PrivateKey` | Transit VM の VPS#1 用秘密鍵 | `transit-vps1-privatekey` の内容 |
+| `Address` | `10.255.1.2/24` | Transit VM のトンネル内 IP |
+| `ListenPort` | `51820` | WireGuard が待ち受ける UDP ポート |
+| `MTU` | `1420` | WireGuard オーバーヘッド分を差し引いた値 |
+| `Table = off` | - | WireGuard の自動ルーティング追加を無効化 (手動管理) |
+| `Endpoint` | VPS のグローバル IP:ポート | 接続先 VPS |
+| `AllowedIPs` | `10.255.1.1/32, 0.0.0.0/0` | このピアから受信を許可する送信元 IP |
+| `PersistentKeepalive` | `25` | 25秒ごとに keepalive を送信 (NAT 越え維持) |
+
+#### VPS #2 用 (wg1)
+
+```bash
+cat > /etc/wireguard/wg1.conf << 'EOF'
+[Interface]
+PrivateKey = <TRANSIT_VM_VPS2_PRIVATE_KEY>
+Address = 10.255.2.2/24
+ListenPort = 51821
+MTU = 1420
+Table = off
+
+PostUp = ip route add 10.255.2.0/24 dev wg1
+PostDown = ip route del 10.255.2.0/24 dev wg1
+
+[Peer]
+PublicKey = <VPS2_PUBLIC_KEY>
+Endpoint = 198.51.100.20:51820
+AllowedIPs = 10.255.2.1/32, 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
+
+chmod 600 /etc/wireguard/wg1.conf
+```
+
+> **VPS 追加時のパターン:** VPS #N を追加する場合、`wg{N-1}.conf` を作成し、
+> `ListenPort` を `51820 + (N-1)` にインクリメントする。
+
+### 2.5 WireGuard rp_filter 設定の追加
+
+WireGuard インターフェースが起動した後に rp_filter を設定する必要がある。
+wg-quick の PostUp で設定する方法もあるが、sysctl ファイルで対応する場合は起動後に再読み込みする。
+
+```bash
+# wg0, wg1 の rp_filter を無効化 (インターフェース存在後に実行)
+# これは WireGuard 起動後に実行すること
+sysctl -w net.ipv4.conf.wg0.rp_filter=0
+sysctl -w net.ipv4.conf.wg1.rp_filter=0
+```
+
+PostUp に入れる場合:
+
+```bash
+# wg0.conf の [Interface] セクションに追加
+PostUp = sysctl -w net.ipv4.conf.wg0.rp_filter=0
+# wg1.conf の [Interface] セクションに追加
+PostUp = sysctl -w net.ipv4.conf.wg1.rp_filter=0
+```
+
+### 2.6 WireGuard の起動と自動起動設定
+
+```bash
+# wg0 起動
+wg-quick up wg0
+
+# wg1 起動
+wg-quick up wg1
+
+# 起動確認
+wg show
+
+# 出力例:
+# interface: wg0
+#   public key: <TRANSIT_VM_VPS1_PUBLIC_KEY>
+#   private key: (hidden)
+#   listening port: 51820
+#
+# peer: <VPS1_PUBLIC_KEY>
+#   endpoint: 203.0.113.10:51820
+#   allowed ips: 10.255.1.1/32, 0.0.0.0/0
+#   latest handshake: 12 seconds ago
+#   transfer: 1.23 KiB received, 4.56 KiB sent
+#   persistent keepalive: every 25 seconds
+#
+# interface: wg1
+#   public key: <TRANSIT_VM_VPS2_PUBLIC_KEY>
+#   ...
+
+# OS 起動時の自動起動設定 (Alpine Linux OpenRC)
+rc-update add wg-quick.wg0 default
+rc-update add wg-quick.wg1 default
+
+# 確認
+rc-status | grep wg-quick
+```
+
+> **Alpine Linux の場合:** `wg-quick` サービスを `default` ランレベルに追加する必要がある。
+> シンボリックリンクが存在しない場合は以下で作成:
+> ```bash
+> ln -s /etc/init.d/wg-quick /etc/init.d/wg-quick.wg0
+> ln -s /etc/init.d/wg-quick /etc/init.d/wg-quick.wg1
+> ```
+
+### 2.7 ルーティング設定
+
+```bash
+# テナントサブネットへのサマリルート
+# Proxmox exit node (pve1 の vmbr1 IP) を next-hop にする
+# 例: pve1 の vmbr1 IP が 172.26.27.10 の場合
+ip route add 10.0.0.0/8 via 172.26.27.10 dev eth1
+
+# 確認
+ip route show
+
+# 期待される出力:
+# default via 172.26.27.1 dev eth1           ← 自宅ルータ (通常インターネット)
+# 10.0.0.0/8 via 172.26.27.10 dev eth1      ← テナントサブネット (exit node 経由)
+# 10.255.1.0/24 dev wg0 scope link          ← VPS #1 WireGuard
+# 10.255.2.0/24 dev wg1 scope link          ← VPS #2 WireGuard
+# 172.26.26.0/24 dev eth0 scope link        ← 管理 NW
+# 172.26.27.0/24 dev eth1 scope link        ← VM NW
+```
+
+**永続化 (Alpine Linux):**
+
+```bash
+# /etc/network/interfaces に追加
+cat >> /etc/network/interfaces << 'EOF'
+
+# テナントサブネットへのサマリルート
+up ip route add 10.0.0.0/8 via 172.26.27.10 dev eth1
+down ip route del 10.0.0.0/8 via 172.26.27.10 dev eth1
+EOF
+```
+
+---
+
+## 3. VPS 側のセットアップ
+
+### 3.1 WireGuard のインストール (Ubuntu/Debian)
+
+```bash
+# Ubuntu 24.04 / Debian 12
+apt update
+apt install -y wireguard wireguard-tools
+
+# カーネルモジュール確認
+modprobe wireguard
+lsmod | grep wireguard
+```
+
+### 3.2 IP フォワーディングの有効化
+
+```bash
+cat > /etc/sysctl.d/99-vpn.conf << 'EOF'
+net.ipv4.ip_forward = 1
+EOF
+
+sysctl -p /etc/sysctl.d/99-vpn.conf
+```
+
+### 3.3 鍵ペアの生成
+
+```bash
+mkdir -p /etc/wireguard
+chmod 700 /etc/wireguard
+
+# 鍵ペア生成
+wg genkey | tee /etc/wireguard/vps-privatekey | wg pubkey > /etc/wireguard/vps-publickey
+chmod 600 /etc/wireguard/vps-privatekey
+
+# 公開鍵の確認 (Transit VM 側に伝える値)
+cat /etc/wireguard/vps-publickey
+```
+
+### 3.4 WireGuard 設定ファイルの作成
+
+#### VPS #1 の場合
+
+```bash
+cat > /etc/wireguard/wg0.conf << 'EOF'
+[Interface]
+PrivateKey = <VPS1_PRIVATE_KEY>
+Address = 10.255.1.1/24
+ListenPort = 51820
+MTU = 1420
+Table = off
+
+# WireGuard ネットワークのルート
+PostUp = ip route add 10.255.1.0/24 dev wg0
+
+# サマリルート: 全テナントサブネットを Transit VM 経由に
+PostUp = ip route add 10.0.0.0/8 dev wg0 via 10.255.1.2
+
+# VM Network (172.26.27.0/24) への経路も追加
+PostUp = ip route add 172.26.27.0/24 dev wg0 via 10.255.1.2
+
+# クリーンアップ
+PostDown = ip route del 10.0.0.0/8 dev wg0 2>/dev/null || true
+PostDown = ip route del 172.26.27.0/24 dev wg0 2>/dev/null || true
+PostDown = ip route del 10.255.1.0/24 dev wg0 2>/dev/null || true
+
+[Peer]
+# Transit VM (Active) の公開鍵
+PublicKey = <TRANSIT_VM_VPS1_PUBLIC_KEY>
+# AllowedIPs: テナントサブネット全体 + VM Network
+AllowedIPs = 10.0.0.0/8, 172.26.27.0/24
+# Transit VM 側の ListenPort がある場合は Endpoint を設定
+# (自宅がグローバル IP 持ちの場合)
+# Endpoint = <自宅グローバルIP>:51820
+PersistentKeepalive = 25
+EOF
+
+chmod 600 /etc/wireguard/wg0.conf
+```
+
+#### VPS #2 の場合
+
+```bash
+cat > /etc/wireguard/wg0.conf << 'EOF'
+[Interface]
+PrivateKey = <VPS2_PRIVATE_KEY>
+Address = 10.255.2.1/24
+ListenPort = 51820
+MTU = 1420
+Table = off
+
+PostUp = ip route add 10.255.2.0/24 dev wg0
+PostUp = ip route add 10.0.0.0/8 dev wg0 via 10.255.2.2
+PostUp = ip route add 172.26.27.0/24 dev wg0 via 10.255.2.2
+
+PostDown = ip route del 10.0.0.0/8 dev wg0 2>/dev/null || true
+PostDown = ip route del 172.26.27.0/24 dev wg0 2>/dev/null || true
+PostDown = ip route del 10.255.2.0/24 dev wg0 2>/dev/null || true
+
+[Peer]
+PublicKey = <TRANSIT_VM_VPS2_PUBLIC_KEY>
+AllowedIPs = 10.0.0.0/8, 172.26.27.0/24
+PersistentKeepalive = 25
+EOF
+
+chmod 600 /etc/wireguard/wg0.conf
+```
+
+**設定項目の解説 (VPS 側):**
+
+| 項目 | 説明 |
+|------|------|
+| `AllowedIPs = 10.0.0.0/8, 172.26.27.0/24` | Transit VM 経由でアクセスするネットワーク範囲。テナント全体 (10.0.0.0/8) と VM Network (172.26.27.0/24) |
+| `Table = off` | ルーティングは PostUp で手動管理 |
+| `PersistentKeepalive = 25` | 自宅側が NAT 配下の場合に必須。VPS 側がグローバル IP のため incoming 接続は問題ないが、自宅→VPS の接続維持のために Transit VM 側で設定 |
+| `Endpoint` | VPS 側では Transit VM の Endpoint を設定しない（自宅がグローバル IP でない場合）。Transit VM 側で VPS の Endpoint を設定し、Transit VM から接続を開始する |
+
+### 3.5 WireGuard の起動と自動起動設定
+
+```bash
+# 起動
+wg-quick up wg0
+
+# 確認
+wg show
+# → peer の latest handshake が表示されれば接続成功
+
+# systemd で自動起動
+systemctl enable wg-quick@wg0
+systemctl status wg-quick@wg0
+```
+
+### 3.6 ルーティング確認
+
+```bash
+ip route show
+
+# 期待される出力 (VPS #1):
+# default via <VPS_DEFAULT_GW> dev eth0     ← VPS のインターネット GW
+# 10.0.0.0/8 via 10.255.1.2 dev wg0        ← テナントサブネット
+# 10.255.1.0/24 dev wg0 scope link          ← WireGuard サブネット
+# 172.26.27.0/24 via 10.255.1.2 dev wg0     ← VM Network
+# <VPS_NETWORK> dev eth0 scope link         ← VPS ローカルネットワーク
+```
+
+---
+
+## 4. 鍵交換手順のまとめ
+
+WireGuard は公開鍵暗号方式を使用する。秘密鍵は各ノードのローカルにのみ保存し、公開鍵のみを対向に伝える。
+
+### 4.1 必要な鍵の一覧
+
+| ノード | 秘密鍵 (ローカル保持) | 公開鍵 (対向に伝える) |
+|-------|---------------------|---------------------|
+| Transit VM (→VPS #1用) | `transit-vps1-privatekey` → `wg0.conf` の PrivateKey | `transit-vps1-publickey` → VPS #1 の Peer.PublicKey |
+| Transit VM (→VPS #2用) | `transit-vps2-privatekey` → `wg1.conf` の PrivateKey | `transit-vps2-publickey` → VPS #2 の Peer.PublicKey |
+| VPS #1 | `vps-privatekey` → `wg0.conf` の PrivateKey | `vps-publickey` → Transit VM の wg0.conf Peer.PublicKey |
+| VPS #2 | `vps-privatekey` → `wg0.conf` の PrivateKey | `vps-publickey` → Transit VM の wg1.conf Peer.PublicKey |
+
+### 4.2 鍵交換フロー
+
+```
+1. Transit VM で鍵ペア生成 (VPS ごとに1つずつ)
+   → 公開鍵をメモ
+
+2. 各 VPS で鍵ペア生成
+   → 公開鍵をメモ
+
+3. 公開鍵を安全な方法で交換
+   (SSH 経由、暗号化メッセージ等。平文メールは非推奨)
+
+4. 各ノードの conf ファイルに相手の公開鍵を記載
+```
+
+> **セキュリティ注意:** 秘密鍵をネットワーク越しに送信しない。公開鍵のみを交換する。
+
+---
+
+## 5. NAT/ファイアウォール設定
+
+### 5.1 Transit VM の nftables 設定
+
+```bash
+cat > /etc/nftables.conf << 'NFTEOF'
+#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # 確立済みセッション
+        ct state established,related accept
+
+        # ループバック
+        iif lo accept
+
+        # VRRP (Keepalived)
+        ip protocol vrrp accept
+
+        # WireGuard (各 VPS 用ポート)
+        udp dport { 51820, 51821 } accept
+
+        # SSH (管理NWからのみ)
+        iif eth0 tcp dport 22 accept
+
+        # ICMP
+        icmp type echo-request accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+
+        # 確立済みセッション
+        ct state established,related accept
+
+        # WireGuard → VM Network (VPS からの inbound)
+        iif wg0 oif eth1 accept
+        iif wg1 oif eth1 accept
+
+        # VM Network → WireGuard (返信)
+        iif eth1 oif wg0 accept
+        iif eth1 oif wg1 accept
+
+        # VM Network → VM Network (通過トラフィック)
+        iif eth1 oif eth1 accept
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+NFTEOF
+
+# 適用
+nft -f /etc/nftables.conf
+
+# 確認
+nft list ruleset
+
+# 永続化 (Alpine)
+rc-update add nftables default
+```
+
+> **VPS 追加時:** `forward` チェインに `iif wg{N} oif eth1 accept` と `iif eth1 oif wg{N} accept` を追加する。
+> `input` チェインの udp dport に新しいポート番号を追加する。
+
+### 5.2 VPS 側の nftables 設定 (NAT: アプローチ A)
+
+初期構築では DNAT + SNAT (masquerade) のシンプルな方式を推奨。
+
+#### VPS #1 (HTTP/HTTPS リバースプロキシ担当)
+
+```bash
+cat > /etc/nftables.conf << 'NFTEOF'
+#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        ct state established,related accept
+        iif lo accept
+
+        # SSH
+        tcp dport 22 accept
+
+        # HTTP/HTTPS
+        tcp dport { 80, 443 } accept
+
+        # WireGuard
+        udp dport 51820 accept
+
+        # ICMP
+        icmp type echo-request accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+        ct state established,related accept
+
+        # eth0 (Internet) → wg0 (Transit VM 経由テナント) の転送
+        iif eth0 oif wg0 accept
+        iif wg0 oif eth0 accept
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+
+table inet nat {
+    chain prerouting {
+        type nat hook prerouting priority dstnat;
+
+        # 例: HTTP/HTTPS → テナント A の VM (10.1.0.10)
+        iif eth0 tcp dport 80 dnat to 10.1.0.10:80
+        iif eth0 tcp dport 443 dnat to 10.1.0.10:443
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat;
+
+        # WireGuard トンネルに出るパケットを SNAT (masquerade)
+        oif wg0 masquerade
+    }
+}
+NFTEOF
+
+nft -f /etc/nftables.conf
+```
+
+#### VPS #2 (ゲームサーバ担当)
+
+```bash
+cat > /etc/nftables.conf << 'NFTEOF'
+#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        ct state established,related accept
+        iif lo accept
+
+        # SSH
+        tcp dport 22 accept
+
+        # ゲームサーバポート
+        tcp dport 25565 accept
+        udp dport 25565 accept
+
+        # WireGuard
+        udp dport 51820 accept
+
+        # ICMP
+        icmp type echo-request accept
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+        ct state established,related accept
+
+        iif eth0 oif wg0 accept
+        iif wg0 oif eth0 accept
+    }
+
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+
+table inet nat {
+    chain prerouting {
+        type nat hook prerouting priority dstnat;
+
+        # Minecraft サーバ → テナント B の VM (10.2.0.20)
+        iif eth0 tcp dport 25565 dnat to 10.2.0.20:25565
+        iif eth0 udp dport 25565 dnat to 10.2.0.20:25565
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat;
+        oif wg0 masquerade
+    }
+}
+NFTEOF
+
+nft -f /etc/nftables.conf
+```
+
+### 5.3 VPS 側の nftables 設定 (透過モード: アプローチ B)
+
+クライアントの実 IP をテナント VM に見せたい場合 (SNAT なし)。
+この場合、Transit VM 側で PBR (ポリシーベースルーティング) の設定が必要。
+
+#### VPS 側 (DNAT のみ、SNAT なし)
+
+```bash
+table inet nat {
+    chain prerouting {
+        type nat hook prerouting priority dstnat;
+        iif eth0 tcp dport 25565 dnat to 10.2.0.20:25565
+        iif eth0 udp dport 25565 dnat to 10.2.0.20:25565
+    }
+    # postrouting で masquerade しない
+}
+```
+
+#### Transit VM 側の PBR 設定 (connmark)
+
+```bash
+# ── nftables: connmark でパケットをマーキング ──
+cat > /etc/nftables.d/pbr.conf << 'EOF'
+table inet mangle {
+    chain prerouting {
+        type filter hook prerouting priority mangle;
+
+        # wg0 (VPS #1) から入ったパケットの conntrack に mark 0x1 を付与
+        iif wg0 ct mark set 0x1
+        # wg1 (VPS #2) から入ったパケットの conntrack に mark 0x2 を付与
+        iif wg1 ct mark set 0x2
+
+        # connmark → fwmark にコピー (返信パケットのルーティングに使用)
+        ct mark 0x1 meta mark set ct mark
+        ct mark 0x2 meta mark set ct mark
+    }
+}
+EOF
+
+# nftables に include して適用
+nft -f /etc/nftables.d/pbr.conf
+
+# ── ip rule: fwmark に基づくルーティングテーブル ──
+# VPS #1 経由で返す
+ip rule add fwmark 0x1 table 100 priority 100
+ip route add default via 10.255.1.1 dev wg0 table 100
+
+# VPS #2 経由で返す
+ip rule add fwmark 0x2 table 101 priority 101
+ip route add default via 10.255.2.1 dev wg1 table 101
+
+# 確認
+ip rule show
+# 100:  from all fwmark 0x1 lookup 100
+# 101:  from all fwmark 0x2 lookup 101
+
+ip route show table 100
+# default via 10.255.1.1 dev wg0
+
+ip route show table 101
+# default via 10.255.2.1 dev wg1
+```
+
+**永続化 (Alpine Linux):**
+
+```bash
+# /etc/local.d/pbr.start として保存
+cat > /etc/local.d/pbr.start << 'EOF'
+#!/bin/sh
+# PBR: ip rule + route tables
+ip rule add fwmark 0x1 table 100 priority 100
+ip route add default via 10.255.1.1 dev wg0 table 100
+
+ip rule add fwmark 0x2 table 101 priority 101
+ip route add default via 10.255.2.1 dev wg1 table 101
+EOF
+
+chmod +x /etc/local.d/pbr.start
+rc-update add local default
+```
+
+---
+
+## 6. VPS 側リバースプロキシ (nginx) の設定
+
+NAT 方式 (アプローチ A) の代わりに、nginx リバースプロキシで HTTP/HTTPS を処理する方法。
+こちらの方が柔軟性が高く推奨される。
+
+### 6.1 nginx のインストール
+
+```bash
+apt install -y nginx certbot python3-certbot-nginx
+```
+
+### 6.2 Let's Encrypt SSL 証明書の取得
+
+```bash
+# 初回取得
+certbot certonly --nginx -d app-a.example.com -d app-b.example.com
+
+# 自動更新の確認
+certbot renew --dry-run
+
+# cron 確認 (certbot が自動で設定済み)
+systemctl status certbot.timer
+```
+
+### 6.3 nginx 設定例 (ドメインベースルーティング)
+
+```bash
+cat > /etc/nginx/sites-available/tenant-a.conf << 'EOF'
+server {
+    listen 80;
+    server_name app-a.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name app-a.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/app-a.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app-a.example.com/privkey.pem;
+
+    # セキュリティヘッダ
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location / {
+        proxy_pass http://10.1.0.10:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket サポート
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # タイムアウト設定
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+}
+EOF
+
+ln -s /etc/nginx/sites-available/tenant-a.conf /etc/nginx/sites-enabled/
+
+# 設定チェック & リロード
+nginx -t && systemctl reload nginx
+```
+
+### 6.4 TCP/UDP プロキシ (stream モジュール)
+
+ゲームサーバなど HTTP 以外のプロトコルを転送する場合:
+
+```bash
+cat > /etc/nginx/stream.d/game-servers.conf << 'EOF'
+# Minecraft (TCP)
+server {
+    listen 25565;
+    proxy_pass 10.2.0.20:25565;
+    proxy_connect_timeout 5s;
+    proxy_timeout 600s;
+}
+
+# Minecraft (UDP)
+server {
+    listen 25565 udp;
+    proxy_pass 10.2.0.20:25565;
+    proxy_timeout 60s;
+}
+EOF
+```
+
+`/etc/nginx/nginx.conf` に stream ブロックを追加:
+
+```bash
+# nginx.conf の末尾に追加 (http ブロックの外)
+stream {
+    include /etc/nginx/stream.d/*.conf;
+}
+```
+
+---
+
+## 7. 接続テストと疎通確認
+
+### 7.1 WireGuard 接続状態の確認
+
+```bash
+# ── Transit VM 側 ──
+
+# インターフェース一覧
+wg show
+
+# 各 VPS との接続確認
+wg show wg0   # VPS #1
+wg show wg1   # VPS #2
+
+# 確認ポイント:
+# - "latest handshake" が表示される → 接続確立済み
+# - "transfer" にデータ量が表示される → 通信が発生している
+# - 表示されない → 接続未確立 (設定確認必要)
+```
+
+### 7.2 Ping テスト
+
+```bash
+# ── Transit VM → VPS ──
+ping -c 3 10.255.1.1    # VPS #1
+ping -c 3 10.255.2.1    # VPS #2
+
+# ── VPS #1 → Transit VM ──
+ping -c 3 10.255.1.2    # Transit VM トンネル IP
+
+# ── VPS #1 → テナント VM (サマリルート経由) ──
+ping -c 3 10.1.0.10     # テナント A の VM
+
+# ── VPS #1 → VM Network ──
+ping -c 3 172.26.27.2   # Transit VM の VM Network IP
+```
+
+### 7.3 ルーティング確認
+
+```bash
+# ── Transit VM ──
+ip route show
+# 確認: 10.0.0.0/8 → pve exit node, 10.255.x.0/24 → wg{N}
+
+traceroute 10.1.0.10
+# 期待: Transit VM → Proxmox exit node → Tenant VM
+
+# ── VPS ──
+ip route show
+# 確認: 10.0.0.0/8 → wg0 via Transit VM IP
+
+traceroute 10.1.0.10
+# 期待: VPS → (WireGuard) → Transit VM → exit node → Tenant VM
+```
+
+### 7.4 End-to-End テスト
+
+```bash
+# ── 外部クライアントから VPS 経由でテナント VM にアクセス ──
+
+# HTTP テスト (外部から VPS のグローバル IP にアクセス)
+curl -v http://203.0.113.10/
+curl -v https://app-a.example.com/
+
+# TCP ポートテスト (ゲームサーバ)
+nc -vz 198.51.100.20 25565
+
+# テナント VM 側でアクセスログを確認
+# → X-Forwarded-For にクライアント IP が入っていること (nginx リバースプロキシの場合)
+# → src IP が VPS の WireGuard IP (10.255.x.1) であること (NAT 方式の場合)
+```
+
+### 7.5 MTU 確認
+
+WireGuard のオーバーヘッドにより MTU 問題が発生する場合がある。
+
+```bash
+# MTU 確認
+ip link show wg0 | grep mtu
+
+# パスMTU ディスカバリテスト
+# Transit VM → VPS
+ping -M do -s 1392 -c 3 10.255.1.1
+
+# 正常: 応答あり
+# 問題: "Frag needed" が返る → MTU を下げる必要あり
+
+# MTU 調整 (必要な場合)
+ip link set wg0 mtu 1380
+```
+
+---
+
+## 8. トラブルシューティング
+
+### 8.1 WireGuard が接続しない
+
+```bash
+# 1. ポートが開いているか確認
+# Transit VM 側
+ss -ulnp | grep 51820
+# → udp  UNCONN  0  0  0.0.0.0:51820  0.0.0.0:*  users:(("wireguard",pid=xxx))
+
+# VPS 側
+ss -ulnp | grep 51820
+
+# 2. VPS 側のファイアウォールで WireGuard ポートが許可されているか
+# Ubuntu (ufw)
+ufw status | grep 51820
+# なければ追加
+ufw allow 51820/udp
+
+# 3. 鍵が正しいか確認
+wg show wg0
+# "peer" セクションの公開鍵が、対向で設定した値と一致するか
+
+# 4. Endpoint が正しいか確認
+wg show wg0
+# endpoint が対向のグローバル IP:ポート になっているか
+
+# 5. WireGuard のデバッグログ有効化
+echo module wireguard +p > /sys/kernel/debug/dynamic_debug/control
+dmesg -w | grep wireguard
+# → テスト後に無効化
+echo module wireguard -p > /sys/kernel/debug/dynamic_debug/control
+```
+
+### 8.2 VPS からテナント VM に到達できない
+
+```bash
+# 1. VPS のルーティング確認
+ip route get 10.1.0.10
+# → 10.1.0.10 via 10.255.1.2 dev wg0 であること
+
+# 2. Transit VM でパケットが転送されているか
+# Transit VM で tcpdump
+tcpdump -i wg0 -n host 10.1.0.10
+# → パケットが来ているか確認
+
+tcpdump -i eth1 -n host 10.1.0.10
+# → eth1 に転送されているか確認
+
+# 3. IP フォワーディングが有効か
+sysctl net.ipv4.ip_forward
+# → 1 であること
+
+# 4. nftables の forward チェインで DROP されていないか
+nft list chain inet filter forward
+# → wg0 ↔ eth1 の accept ルールがあるか
+
+# 5. nftables カウンタで確認
+nft add rule inet filter forward counter
+nft list ruleset | grep counter
+# → パケットがカウントされているか
+```
+
+### 8.3 非対称ルーティング (返信パケットが VPS 経由で戻らない)
+
+```bash
+# 1. NAT 方式 (アプローチ A) の場合
+# VPS で masquerade が有効か確認
+nft list table inet nat
+# → oif wg0 masquerade があるか
+
+# conntrack テーブルで NAT エントリ確認
+conntrack -L | grep 10.1.0.10
+
+# 2. 透過モード (アプローチ B) の場合
+# Transit VM で connmark が設定されているか
+nft list table inet mangle
+
+# ip rule が正しいか
+ip rule show | grep fwmark
+
+# route table が正しいか
+ip route show table 100
+ip route show table 101
+```
+
+### 8.4 WireGuard パフォーマンス測定
+
+```bash
+# iperf3 でスループット測定
+# テナント VM で iperf3 サーバ起動
+iperf3 -s
+
+# VPS から測定
+iperf3 -c 10.1.0.10 -t 10
+# → WireGuard 経由のスループットを確認
+
+# Transit VM 直接
+iperf3 -c 10.255.1.1 -t 10
+# → WireGuard トンネル自体のスループット
+```
+
+---
+
+## 9. VPS 追加時の手順チェックリスト
+
+新しい VPS (VPS #N) を追加する際の手順:
+
+### 9.1 Transit VM 側
+
+```bash
+# 1. 新しい鍵ペアを生成
+wg genkey | tee /etc/wireguard/transit-vpsN-privatekey | wg pubkey > /etc/wireguard/transit-vpsN-publickey
+chmod 600 /etc/wireguard/transit-vpsN-privatekey
+
+# 2. WireGuard 設定ファイル作成
+# ListenPort は既存の最大値 + 1
+cat > /etc/wireguard/wg{N-1}.conf << EOF
+[Interface]
+PrivateKey = $(cat /etc/wireguard/transit-vpsN-privatekey)
+Address = 10.255.{N}.2/24
+ListenPort = $((51820 + N - 1))
+MTU = 1420
+Table = off
+PostUp = ip route add 10.255.{N}.0/24 dev wg{N-1}
+PostUp = sysctl -w net.ipv4.conf.wg{N-1}.rp_filter=0
+PostDown = ip route del 10.255.{N}.0/24 dev wg{N-1}
+
+[Peer]
+PublicKey = <VPSN_PUBLIC_KEY>
+Endpoint = <VPSN_GLOBAL_IP>:51820
+AllowedIPs = 10.255.{N}.1/32, 0.0.0.0/0
+PersistentKeepalive = 25
+EOF
+
+# 3. WireGuard 起動
+wg-quick up wg{N-1}
+
+# 4. 自動起動登録
+ln -s /etc/init.d/wg-quick /etc/init.d/wg-quick.wg{N-1}
+rc-update add wg-quick.wg{N-1} default
+
+# 5. nftables 更新 (forward ルール追加)
+# /etc/nftables.conf を編集して以下を追加:
+#   iif wg{N-1} oif eth1 accept
+#   iif eth1 oif wg{N-1} accept
+# input チェインの udp dport にポート追加
+nft -f /etc/nftables.conf
+
+# 6. PBR 使用時は ip rule / route table 追加
+ip rule add fwmark 0x{N} table $((99 + N)) priority $((99 + N))
+ip route add default via 10.255.{N}.1 dev wg{N-1} table $((99 + N))
+```
+
+### 9.2 新 VPS 側
+
+```bash
+# 1. WireGuard インストール
+apt install -y wireguard wireguard-tools
+
+# 2. IP フォワーディング有効化
+echo 'net.ipv4.ip_forward = 1' > /etc/sysctl.d/99-vpn.conf
+sysctl -p /etc/sysctl.d/99-vpn.conf
+
+# 3. 鍵ペア生成
+wg genkey | tee /etc/wireguard/vps-privatekey | wg pubkey > /etc/wireguard/vps-publickey
+chmod 600 /etc/wireguard/vps-privatekey
+
+# 4. 公開鍵を Transit VM 管理者に伝達
+cat /etc/wireguard/vps-publickey
+
+# 5. Transit VM の公開鍵を受け取り、設定ファイル作成
+cat > /etc/wireguard/wg0.conf << EOF
+[Interface]
+PrivateKey = $(cat /etc/wireguard/vps-privatekey)
+Address = 10.255.{N}.1/24
+ListenPort = 51820
+MTU = 1420
+Table = off
+PostUp = ip route add 10.255.{N}.0/24 dev wg0
+PostUp = ip route add 10.0.0.0/8 dev wg0 via 10.255.{N}.2
+PostUp = ip route add 172.26.27.0/24 dev wg0 via 10.255.{N}.2
+PostDown = ip route del 10.0.0.0/8 dev wg0 2>/dev/null || true
+PostDown = ip route del 172.26.27.0/24 dev wg0 2>/dev/null || true
+
+[Peer]
+PublicKey = <TRANSIT_VM_VPSN_PUBLIC_KEY>
+AllowedIPs = 10.0.0.0/8, 172.26.27.0/24
+PersistentKeepalive = 25
+EOF
+
+# 6. WireGuard 起動 & 自動起動
+wg-quick up wg0
+systemctl enable wg-quick@wg0
+
+# 7. 疎通確認
+ping -c 3 10.255.{N}.2
+ping -c 3 10.1.0.10    # テナント VM
+```
+
+### 9.3 確認チェックリスト
+
+| # | 確認項目 | コマンド | 期待値 |
+|---|---------|---------|--------|
+| 1 | Transit VM ↔ VPS 疎通 | `ping -c3 10.255.{N}.1` (Transit VM から) | 応答あり |
+| 2 | VPS → Transit VM 疎通 | `ping -c3 10.255.{N}.2` (VPS から) | 応答あり |
+| 3 | VPS → テナント VM 疎通 | `ping -c3 10.1.0.10` (VPS から) | 応答あり |
+| 4 | WireGuard ハンドシェイク | `wg show` の latest handshake | 数秒前 |
+| 5 | ルーティング | `ip route get 10.1.0.10` (VPS から) | via wg0 |
+| 6 | nftables ルール | `nft list ruleset` (Transit VM) | wg{N-1} のルールあり |
+
+---
+
+## 10. Keepalived (VRRP) との統合
+
+### 10.1 WireGuard フェイルオーバー時の考慮事項
+
+Active Transit VM がダウンした場合、Standby が VIP を引き継ぐ。
+WireGuard の接続先を Active → Standby に切り替える必要がある。
+
+**方式A: 各 VPS で Standby の Endpoint も持つ**
+
+```bash
+# VPS 側 wg0.conf に Standby の Peer も追加
+# ただし WireGuard は 1 peer = 1 AllowedIPs セットなので、
+# 同じ AllowedIPs を持つ2つの peer は設定できない
+# → この方式は使えない
+```
+
+**方式B: フェイルオーバー通知で VPS 側 peer を切り替え**
+
+Keepalived の notify スクリプトで、各 VPS にフェイルオーバーを通知し、peer の Endpoint を切り替える。
+
+```bash
+# /usr/local/bin/transit-notify.sh (Transit VM Standby 側)
+#!/bin/bash
+STATE=$1
+case "$STATE" in
+    master)
+        logger "VRRP: Becoming MASTER - notifying VPSes"
+        # 各 VPS に SSH で Peer Endpoint を切り替え
+        # VPS #1
+        ssh vps1 "wg set wg0 peer <TRANSIT_STANDBY_PUBKEY> endpoint <TRANSIT_STANDBY_GLOBAL_IP>:51820"
+        # VPS #2
+        ssh vps2 "wg set wg0 peer <TRANSIT_STANDBY_PUBKEY> endpoint <TRANSIT_STANDBY_GLOBAL_IP>:51821"
+        ;;
+esac
+```
+
+**方式C (推奨): VPS → Transit VM の接続を Transit VM 起点にする**
+
+Transit VM が常に VPS へ接続する (Endpoint を Transit VM 側で設定)。
+VPS 側は Endpoint を設定しない。PersistentKeepalive で接続を維持する。
+
+```
+Active 時:    Transit VM #1 → VPS (Endpoint: VPS IP) → ハンドシェイク確立
+Standby 移行: Transit VM #2 → VPS (Endpoint: VPS IP) → ハンドシェイク確立 (上書き)
+```
+
+VPS は「最後にハンドシェイクした peer からのパケット」に応答するため、
+Standby が接続すれば自動的に切り替わる。
+
+```bash
+# Standby Transit VM のヘルスチェック + フェイルオーバースクリプト
+# /usr/local/bin/check-wg.sh
+#!/bin/bash
+# Active が生きている間は WireGuard を down にしておく
+# VRRP で MASTER になったら WireGuard を up にする
+
+# /usr/local/bin/transit-notify.sh
+#!/bin/bash
+STATE=$1
+case "$STATE" in
+    master)
+        logger "VRRP: Becoming MASTER - starting WireGuard"
+        wg-quick up wg0
+        wg-quick up wg1
+        ;;
+    backup|fault)
+        logger "VRRP: Becoming $STATE - stopping WireGuard"
+        wg-quick down wg0 2>/dev/null || true
+        wg-quick down wg1 2>/dev/null || true
+        ;;
+esac
+```
+
+### 10.2 Keepalived + WireGuard の起動順序
+
+```bash
+# Alpine Linux の起動順序
+# 1. ネットワーク (eth0, eth1)
+# 2. nftables
+# 3. keepalived
+# 4. WireGuard (keepalived の notify で制御)
+
+# 自動起動設定
+rc-update add networking boot
+rc-update add nftables default
+rc-update add keepalived default
+# ※ WireGuard は keepalived の notify で起動するため、自動起動には登録しない (Standby の場合)
+# Active 固定で運用する場合は登録しても OK
+```
+
+---
+
+## 付録A: 設定ファイル一覧
+
+| ファイル (Transit VM) | 用途 |
+|----------------------|------|
+| `/etc/wireguard/wg0.conf` | VPS #1 用 WireGuard 設定 |
+| `/etc/wireguard/wg1.conf` | VPS #2 用 WireGuard 設定 |
+| `/etc/wireguard/transit-vps{N}-privatekey` | VPS #N 接続用の秘密鍵 |
+| `/etc/wireguard/transit-vps{N}-publickey` | VPS #N 接続用の公開鍵 |
+| `/etc/nftables.conf` | ファイアウォール + NAT ルール |
+| `/etc/nftables.d/pbr.conf` | PBR 用 connmark (アプローチ B 使用時) |
+| `/etc/sysctl.d/99-transit.conf` | カーネルパラメータ |
+| `/etc/network/interfaces` | NIC + 静的ルート設定 |
+| `/etc/keepalived/keepalived.conf` | VRRP 冗長化 |
+| `/etc/local.d/pbr.start` | PBR ip rule/route 永続化 |
+
+| ファイル (VPS) | 用途 |
+|---------------|------|
+| `/etc/wireguard/wg0.conf` | Transit VM 用 WireGuard 設定 |
+| `/etc/wireguard/vps-privatekey` | 秘密鍵 |
+| `/etc/wireguard/vps-publickey` | 公開鍵 |
+| `/etc/nftables.conf` | ファイアウォール + NAT ルール |
+| `/etc/sysctl.d/99-vpn.conf` | カーネルパラメータ |
+| `/etc/nginx/sites-available/*.conf` | リバースプロキシ設定 |
+| `/etc/nginx/stream.d/*.conf` | TCP/UDP プロキシ設定 |
+
+---
+
+## 付録B: コマンドリファレンス
+
+### WireGuard 操作
+
+```bash
+# 起動
+wg-quick up wg0
+
+# 停止
+wg-quick down wg0
+
+# 状態確認
+wg show                    # 全インターフェース
+wg show wg0                # 特定インターフェース
+wg show wg0 latest-handshakes   # ハンドシェイク時刻のみ
+wg show wg0 transfer       # 転送量のみ
+
+# ピア動的追加 (conf 変更なしで一時的に追加)
+wg set wg0 peer <PUBKEY> endpoint <IP>:51820 allowed-ips 10.255.3.1/32 persistent-keepalive 25
+
+# ピア動的削除
+wg set wg0 peer <PUBKEY> remove
+
+# 設定の再読み込み (接続を切らずに)
+wg syncconf wg0 <(wg-quick strip wg0)
+```
+
+### ルーティング操作
+
+```bash
+# ルート確認
+ip route show
+ip route show table 100     # PBR テーブル
+ip route get 10.1.0.10      # 特定 IP への経路確認
+
+# ルート追加/削除
+ip route add 10.0.0.0/8 via 172.26.27.10 dev eth1
+ip route del 10.0.0.0/8
+
+# ip rule (PBR)
+ip rule show
+ip rule add fwmark 0x1 table 100 priority 100
+ip rule del fwmark 0x1
+```
+
+### nftables 操作
+
+```bash
+# 全ルール表示
+nft list ruleset
+
+# 特定テーブル表示
+nft list table inet filter
+nft list table inet nat
+nft list table inet mangle
+
+# ルール適用
+nft -f /etc/nftables.conf
+
+# ルール追加 (対話的)
+nft add rule inet filter forward iif wg2 oif eth1 accept
+
+# 全ルール削除 (注意)
+nft flush ruleset
+
+# カウンタ付きルール追加 (デバッグ用)
+nft add rule inet filter forward iif wg0 oif eth1 counter accept
+```
+
+### デバッグ
+
+```bash
+# パケットキャプチャ
+tcpdump -i wg0 -n                          # WireGuard トンネル
+tcpdump -i eth1 -n host 10.1.0.10          # VM Network
+tcpdump -i eth0 -n udp port 51820          # WireGuard UDP パケット
+
+# conntrack テーブル
+conntrack -L | head -20
+conntrack -L -s 10.255.1.1                 # 特定 src
+conntrack -C                                # エントリ数
+
+# WireGuard デバッグログ
+echo module wireguard +p > /sys/kernel/debug/dynamic_debug/control
+dmesg -w | grep wireguard
+# 無効化
+echo module wireguard -p > /sys/kernel/debug/dynamic_debug/control
+```

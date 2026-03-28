@@ -626,6 +626,459 @@ sequenceDiagram
     Note over PVE: VM 起動後 Cloud-init が実行:<br/>1. DB パッケージインストール<br/>2. 設定ファイル配置<br/>3. DB 初期化<br/>4. ユーザ・権限設定<br/>5. バックアップ cron 有効化
 ```
 
+### 2.5 アプリケーションレイヤーアーキテクチャ
+
+#### 2.5.1 設計方針
+
+アプリケーション層を以下のレイヤーに分離し、各レイヤー間のデータ受け渡しには **Data クラス（値オブジェクト）** を用いる。
+Eloquent Model は Repository 内部に閉じ込め、Controller・Service・View から直接参照しない。
+
+**原則:**
+- Controller / Service / View は Eloquent Model を一切参照しない
+- すべてのデータの受け渡しは Data クラスを介して行う
+- Data クラスは static ファクトリメソッド (`of` / `make`) でのみ生成する
+- Data クラスの外部プロパティアクセスは `getXxx()` メソッドを通じて行う (public プロパティ直接アクセスは禁止)
+- Repository は Eloquent Model を受け取り / 返却せず、Data クラスで入出力を行う
+
+#### 2.5.2 レイヤー構成図
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        View (Blade / Livewire)               │
+│   ResponseData (getXxx() でアクセス)                          │
+└──────────────────┬───────────────────────────────────────────┘
+                   │ ResponseData
+                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     Controller (Single Action)               │
+│   RequestData ← FormRequest → Data::of(validated)            │
+│   Controller → Service → ResponseData → View                 │
+└──────────────────┬───────────────────────────────────────────┘
+                   │ RequestData / CommandData
+                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     Service (ビジネスロジック)                 │
+│   外部API呼び出し (Lib/Proxmox, Lib/Nomad 等)               │
+│   リポジトリを通じた永続化                                    │
+│   Service は Repository に Data を渡し、Data を受け取る       │
+└──────────────────┬───────────────────────────────────────────┘
+                   │ Data
+                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     Repository (永続化層)                     │
+│   Eloquent Model はこの内部でのみ使用                         │
+│   Data ←→ Model の変換をこの層で行う                          │
+│   例: TenantData = TenantRepository::findById(int $id)      │
+└──────────────────┬───────────────────────────────────────────┘
+                   │ Eloquent Model (内部)
+                   ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     Eloquent Model (DB)                       │
+│   Repository 以外からの直接利用は禁止                          │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### 2.5.3 Data クラス設計規約
+
+**基本構造:**
+
+```php
+namespace App\Data\Tenant;
+
+final readonly class TenantData
+{
+    private function __construct(
+        private int $id,
+        private string $uuid,
+        private string $name,
+        private string $slug,
+        private string $status,
+        private ?string $vnetName,
+        private ?int $vni,
+        private ?string $networkCidr,
+        private ?string $nomadNamespace,
+    ) {
+    }
+
+    /**
+     * Eloquent Model から生成 (Repository 内部でのみ使用)
+     */
+    public static function of(Tenant $model): self
+    {
+        return new self(
+            id:              $model->id,
+            uuid:            $model->uuid,
+            name:            $model->name,
+            slug:            $model->slug,
+            status:          $model->status,
+            vnetName:        $model->vnet_name,
+            vni:             $model->vni,
+            networkCidr:     $model->network_cidr,
+            nomadNamespace:  $model->nomad_namespace,
+        );
+    }
+
+    /**
+     * 配列 / リクエストデータから生成 (Controller 等から使用)
+     *
+     * @param array{name: string, slug: string, ...} $attributes
+     */
+    public static function make(array $attributes): self
+    {
+        return new self(
+            id:              $attributes['id'] ?? 0,
+            uuid:            $attributes['uuid'] ?? '',
+            name:            $attributes['name'],
+            slug:            $attributes['slug'],
+            status:          $attributes['status'] ?? 'active',
+            vnetName:        $attributes['vnet_name'] ?? null,
+            vni:             $attributes['vni'] ?? null,
+            networkCidr:     $attributes['network_cidr'] ?? null,
+            nomadNamespace:  $attributes['nomad_namespace'] ?? null,
+        );
+    }
+
+    public function getId(): int { return $this->id; }
+    public function getUuid(): string { return $this->uuid; }
+    public function getName(): string { return $this->name; }
+    public function getSlug(): string { return $this->slug; }
+    public function getStatus(): string { return $this->status; }
+    public function getVnetName(): ?string { return $this->vnetName; }
+    public function getVni(): ?int { return $this->vni; }
+    public function getNetworkCidr(): ?string { return $this->networkCidr; }
+    public function getNomadNamespace(): ?string { return $this->nomadNamespace; }
+
+    /**
+     * 連想配列に変換 (View / API レスポンス用)
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id'               => $this->id,
+            'uuid'             => $this->uuid,
+            'name'             => $this->name,
+            'slug'             => $this->slug,
+            'status'           => $this->status,
+            'vnet_name'        => $this->vnetName,
+            'vni'              => $this->vni,
+            'network_cidr'     => $this->networkCidr,
+            'nomad_namespace'  => $this->nomadNamespace,
+        ];
+    }
+}
+```
+
+**Data クラスの種別と作成基準:**
+
+| 種別 | 作成基準 | 配置先 | 命名規則 | 例 |
+|------|---------|--------|---------|-----|
+| EntityData | **常に作る** (必須) | `app/Data/{Entity}/` | `{Entity}Data` | `TenantData`, `VmMetaData` |
+| RequestData | **複雑な入力変換が必要な場合のみ** | `app/Http/Requests/{Entity}/` | `{Action}{Entity}RequestData` | `CreateVmRequestData` |
+| ResponseData | **複数エンティティを合成する場合のみ** | `app/Data/{Entity}/` | `{Entity}ResponseData` | `VmDetailResponseData` |
+| CommandData | **非同期ジョブに複雑なパラメータを渡す場合のみ** | `app/Data/{Entity}/` | `{Action}{Entity}Command` | `ProvisionVmCommand` |
+
+> **簡素化の原則:**
+> - 通常は `EntityData::make($request->validated())` で十分。RequestData は作らない。
+> - EntityData がそのまま View に渡せるなら ResponseData は作らない。
+> - 典型的なエンティティは **1ファイル (EntityData のみ)** で済む。複雑なものでも **2〜3ファイル**。
+> - RequestData を作る場合は、対応する FormRequest と同じディレクトリ (`Http/Requests/`) に配置する。
+
+**Data クラス共通規約:**
+
+| 規約 | 説明 |
+|------|------|
+| `final readonly class` | 不変・継承不可 |
+| `private function __construct()` | コンストラクタは private (ファクトリメソッド経由で生成) |
+| `static of(Model)` | Eloquent Model からの変換 (Repository 内部向け) |
+| `static make(array)` | 配列 / バリデーション後データからの変換 (Controller 等向け) |
+| `getXxx(): Type` | プロパティアクセスは getter メソッド経由 |
+| `toArray(): array` | 連想配列変換 (View / JSON レスポンス向け) |
+
+#### 2.5.4 Repository 設計規約
+
+**基本構造:**
+
+```php
+namespace App\Repositories;
+
+use App\Data\Tenant\TenantData;
+use App\Models\Tenant;
+
+final class TenantRepository
+{
+    public function findById(int $id): ?TenantData
+    {
+        $model = Tenant::query()->find($id);
+
+        return $model ? TenantData::of($model) : null;
+    }
+
+    /**
+     * @return list<TenantData>
+     */
+    public function findAll(): array
+    {
+        return Tenant::query()
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Tenant $model) => TenantData::of($model))
+            ->all();
+    }
+
+    /**
+     * @return list<TenantData>
+     */
+    public function findByStatus(string $status): array
+    {
+        return Tenant::query()
+            ->where('status', $status)
+            ->get()
+            ->map(fn (Tenant $model) => TenantData::of($model))
+            ->all();
+    }
+
+    public function store(TenantData $data): TenantData
+    {
+        $model = Tenant::query()->create($data->toArray());
+
+        return TenantData::of($model);
+    }
+
+    public function update(int $id, TenantData $data): TenantData
+    {
+        $model = Tenant::query()->findOrFail($id);
+        $model->update($data->toArray());
+
+        return TenantData::of($model->refresh());
+    }
+
+    public function delete(int $id): void
+    {
+        Tenant::query()->findOrFail($id)->delete();
+    }
+
+    public function nextVmId(): int
+    {
+        // 既存の VMID 最大値 + 1 (Proxmox の VMID 採番)
+        $max = VmMeta::query()->max('proxmox_vmid') ?? 99;
+
+        return $max + 1;
+    }
+}
+```
+
+**Repository 規約:**
+
+| 規約 | 説明 |
+|------|------|
+| 引数・返り値は Data クラス | Eloquent Model を外部に露出しない |
+| `Model::query()` 経由でクエリ | `DB::` ファサードは使わない |
+| リレーション取得は eager load | N+1 問題を防ぐ |
+| Interface + 実装分離は任意 | Phase 1 では具象クラスで十分。テスト時は DI でモック可 |
+
+#### 2.5.5 Service と Controller の実装例
+
+**Service 例 (TenantService):**
+
+```php
+namespace App\Services;
+
+use App\Data\Tenant\TenantData;
+use App\Repositories\TenantRepository;
+use Illuminate\Support\Facades\DB;
+
+final class TenantService
+{
+    public function __construct(
+        private TenantRepository $tenantRepository,
+        private ProxmoxSdnService $sdnService,
+        private NomadService $nomadService,
+        private S3CredentialService $s3CredentialService,
+    ) {
+    }
+
+    /**
+     * @param TenantData $data EntityData::make(validated) で生成済み
+     */
+    public function create(TenantData $data): TenantData
+    {
+        return DB::transaction(function () use ($data) {
+            // 1. テナントDB登録
+            $created = $this->tenantRepository->store($data);
+
+            // 2. VNI / VNet 算出・更新
+            $vni = 10000 + $created->getId();
+            $vnetName = 'tenant-' . $created->getId();
+            $networkCidr = '10.' . $created->getId() . '.0.0/24';
+
+            $updated = $this->tenantRepository->update($created->getId(), TenantData::make([
+                ...$created->toArray(),
+                'vni'        => $vni,
+                'vnet_name'  => $vnetName,
+                'network_cidr' => $networkCidr,
+            ]));
+
+            // 3. Proxmox SDN VNet 作成
+            $this->sdnService->createVnet($updated);
+
+            // 4. S3 認証情報発行
+            $this->s3CredentialService->createDefaultCredential($updated);
+
+            // 5. Nomad Namespace 作成
+            $this->nomadService->createNamespace($updated);
+            $updated = $this->tenantRepository->update($updated->getId(), TenantData::make([
+                ...$updated->toArray(),
+                'nomad_namespace' => $vnetName,
+            ]));
+
+            return $updated;
+        });
+    }
+}
+```
+
+**Controller 例 (Single Action Controller):**
+
+```php
+namespace App\Http\Controllers\Tenant;
+
+use App\Data\Tenant\TenantData;
+use App\Http\Requests\Tenant\CreateTenantRequest;
+use App\Services\TenantService;
+use Illuminate\Http\RedirectResponse;
+
+final class Store
+{
+    public function __invoke(
+        CreateTenantRequest $request,
+        TenantService $tenantService,
+    ): RedirectResponse {
+        // FormRequest → EntityData に直接変換 (RequestData クラス不要)
+        $data = TenantData::make($request->validated());
+
+        // Service に EntityData を渡す
+        $tenantData = $tenantService->create($data);
+
+        return redirect()
+            ->route('tenants.show', $tenantData->getId())
+            ->with('success', 'テナントを作成しました');
+    }
+}
+```
+
+**View での利用例:**
+
+```blade
+{{-- $tenant は TenantData インスタンス --}}
+<h1>{{ $tenant->getName() }}</h1>
+<p>スラッグ: {{ $tenant->getSlug() }}</p>
+<p>ステータス: {{ $tenant->getStatus() }}</p>
+@if($tenant->getVnetName())
+    <p>VNet: {{ $tenant->getVnetName() }} (CIDR: {{ $tenant->getNetworkCidr() }})</p>
+@endif
+```
+
+#### 2.5.6 ディレクトリ構成 (Data / Repository 追加)
+
+```
+app/
+├── Data/                          # Data クラス (EntityData 中心)
+│   ├── Tenant/
+│   │   └── TenantData.php         # EntityData (常に作成)
+│   ├── Vm/
+│   │   ├── VmMetaData.php         # EntityData
+│   │   ├── ProvisionVmCommand.php # CommandData (非同期ジョブ用)
+│   │   └── VmDetailResponseData.php # ResponseData (VM+Proxmox状態を合成)
+│   ├── Dbaas/
+│   │   ├── DatabaseInstanceData.php
+│   │   ├── ProvisionDbaasCommand.php
+│   │   └── DbaasDetailResponseData.php
+│   ├── Container/
+│   │   ├── ContainerJobData.php
+│   │   └── DeployContainerCommand.php
+│   ├── Network/
+│   │   └── NetworkData.php
+│   ├── S3/
+│   │   └── S3CredentialData.php
+│   └── User/
+│       └── UserData.php
+├── Repositories/                  # Repository (永続化層)
+│   ├── TenantRepository.php
+│   ├── VmMetaRepository.php
+│   ├── DatabaseInstanceRepository.php
+│   ├── ContainerJobRepository.php
+│   ├── BackupScheduleRepository.php
+│   ├── S3CredentialRepository.php
+│   ├── UserRepository.php
+│   └── ProxmoxNodeRepository.php
+├── Http/
+│   ├── Controllers/               # (既存: Single Action Controller)
+│   └── Requests/                  # FormRequest + RequestData (必要な場合のみ)
+│       ├── Vm/
+│       │   ├── CreateVmRequest.php     # FormRequest (常に作成)
+│       │   ├── CreateVmRequestData.php # RequestData (複雑な入力変換時のみ)
+│       │   └── UpdateVmRequest.php
+│       ├── Dbaas/
+│       │   └── CreateDatabaseRequest.php
+│       └── Container/
+│           └── DeployContainerRequest.php
+├── Models/                        # Eloquent Model (Repository 内部でのみ使用)
+│   └── ...
+├── Services/                      # ビジネスロジック (Data ↔ Repository)
+│   └── ...
+├── Lib/                           # 外部 API クライアント (既存)
+│   └── ...
+└── Enums/                         # (既存)
+    └── ...
+```
+
+> **ファイル数の目安:** 8 エンティティ × 平均 1.5 Data クラス = 約12ファイル (`Data/` 配下)。
+> 非同期ジョブが絡む VM / DBaaS / Container のみ CommandData や ResponseData が追加される。
+
+#### 2.5.7 レイヤー間のデータフロー図
+
+```
+[HTTP Request]
+    │
+    ▼
+[FormRequest]  バリデーション
+    │
+    ▼
+[Controller]   EntityData::make(validated) で Data 生成
+    │           Service に EntityData / Command を渡す
+    ▼
+[Service]      ビジネスロジック実行
+    │           Repository に Data を渡す / Data を受け取る
+    │           外部 API (Lib/*) とは Lib 固有の DataObjects で通信
+    ▼
+[Repository]   Data ←→ Eloquent Model 変換
+    │           Model::query() で DB 操作
+    ▼
+[Eloquent]     DB アクセス (Repository 内部に閉じる)
+
+
+[戻り]
+    Repository → EntityData → Service → ResponseData → Controller → View
+```
+
+#### 2.5.8 Lib と Data クラスの関係
+
+`Lib/Proxmox/DataObjects` や `Lib/Nomad/DataObjects` は外部 API 固有のデータ構造であり、
+アプリケーション層の Data クラスとは別に管理する。
+Service 層で Lib の DataObjects とアプリケーション Data クラスの変換を行う。
+
+```
+[Service]
+    │
+    ├── App\Data\Vm\ProvisionVmCommand (アプリケーション Data)
+    │       ↓ 変換
+    ├── App\Lib\Proxmox\DataObjects\VmConfig (Lib 固有 DataObject)
+    │       ↓
+    └── App\Lib\Proxmox\ProxmoxApi::createVm(VmConfig)
+```
+
 ---
 
 ## 3. 非同期ジョブ設計 (Laravel Queue)
