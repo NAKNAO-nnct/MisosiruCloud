@@ -15,7 +15,7 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 | Proxmox ライブラリ | ✅ 完了 | `App\\Lib\\Proxmox` 一式 + テストあり |
 | テナント管理 | ✅ 完了 | CRUD + S3 認証情報管理 + テストあり |
 | VM 管理 | ✅ 完了 | CRUD/操作/内部API/View/テストあり |
-| DBaaS | ⚠️ 部分実装 | Service/Data/Repository は実装済み、Controller/View/Route 未実装 |
+| DBaaS | ⚠️ ほぼ実装済み | Service/Controller/View/Route/スケジューラ実装済み。残りは一部テスト |
 | CaaS (Nomad 連携) | ❌ 未着手 | `Lib\\Nomad` / Container 機能未実装 |
 | ネットワーク管理 | ❌ 未着手 | Network / VPS / DNS 管理機能未実装 |
 | VPS ゲートウェイ管理 | ❌ 未着手 | 未実装 |
@@ -61,7 +61,7 @@ Phase 9 ❌ (Phase 2 後いつでも可)
 | Phase 2 | ✅ 完了 | Proxmox Client・Resources・DataObjects・例外・バインディング・テスト実装 |
 | Phase 3 | ✅ 完了 | Tenant/S3 の Service/Controller/View/Request/Feature テスト実装 |
 | Phase 4 | ✅ 完了 | VM の Service/Controller/View/Internal API/Request/Unit+Feature テスト実装 |
-| Phase 5 | ⚠️ 部分実装 | `DbaasService`/`BackupService` と Data/Repository 実装済み。UI層未着手 |
+| Phase 5 | ⚠️ ほぼ実装済み | DBaaS UI/API/Route とバックアップスケジューラ実装済み。残りは Unit テスト中心 |
 | Phase 6 | ❌ 未着手 | Nomad 連携（Lib/Service/Controller/View/Test）未着手 |
 | Phase 7 | ❌ 未着手 | Network/VPS/DNS 管理未着手 |
 | Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
