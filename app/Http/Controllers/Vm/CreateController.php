@@ -22,7 +22,8 @@ class CreateController extends Controller
     {
         $tenants = $this->tenantRepository->all();
         $templates = $this->vmService->listAllVms();
+        $formOptions = $this->vmService->getFormOptions();
 
-        return view('vms.create', compact('tenants', 'templates'));
+        return view('vms.create', array_merge(compact('tenants', 'templates'), $formOptions));
     }
 }

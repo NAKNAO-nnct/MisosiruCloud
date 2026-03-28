@@ -13,12 +13,13 @@ use App\Repositories\DatabaseInstanceRepository;
 use App\Repositories\VmMetaRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class DbaasService
 {
     public function __construct(
         private readonly VmService $vmService,
-        private readonly ProxmoxApi $api,
+        private readonly ?ProxmoxApi $api,
         private readonly DatabaseInstanceRepository $dbInstanceRepository,
         private readonly BackupScheduleRepository $backupScheduleRepository,
         private readonly VmMetaRepository $vmMetaRepository,
@@ -67,6 +68,8 @@ class DbaasService
 
     public function start(DatabaseInstanceData $db): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByIdOrFail($db->getVmMetaId());
         $this->api->vm()->startVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
         $this->dbInstanceRepository->update($db->getId(), ['status' => 'running']);
@@ -74,6 +77,8 @@ class DbaasService
 
     public function stop(DatabaseInstanceData $db): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByIdOrFail($db->getVmMetaId());
         $this->api->vm()->stopVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
         $this->dbInstanceRepository->update($db->getId(), ['status' => 'stopped']);
@@ -110,5 +115,12 @@ class DbaasService
             DatabaseType::Postgres => 5432,
             DatabaseType::Redis => 6379,
         };
+    }
+
+    private function ensureProxmoxApiConfigured(): void
+    {
+        if (!$this->api) {
+            throw new RuntimeException('No active Proxmox node configured.');
+        }
     }
 }

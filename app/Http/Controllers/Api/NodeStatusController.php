@@ -11,12 +11,18 @@ use Illuminate\Http\Request;
 
 class NodeStatusController extends Controller
 {
-    public function __construct(private readonly ProxmoxApi $api)
+    public function __construct(private readonly ?ProxmoxApi $api)
     {
     }
 
     public function __invoke(Request $request): JsonResponse
     {
+        if (!$this->api) {
+            return response()->json([
+                'message' => 'No active Proxmox node configured.',
+            ], 503);
+        }
+
         $nodes = $this->api->node()->listNodes();
         $statuses = [];
 

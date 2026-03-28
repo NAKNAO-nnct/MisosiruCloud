@@ -2,9 +2,30 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\DbaasStatusController as ApiDbaasStatus;
 use App\Http\Controllers\Api\NodeStatusController as ApiNodeStatus;
 use App\Http\Controllers\Api\VmStatusController as ApiVmStatus;
 use App\Http\Controllers\Dashboard\IndexController as DashboardIndex;
+use App\Http\Controllers\Dbaas\BackupController as DbaasBackup;
+use App\Http\Controllers\Dbaas\BackupsController as DbaasBackups;
+use App\Http\Controllers\Dbaas\CreateController as DbaasCreate;
+use App\Http\Controllers\Dbaas\CredentialsController as DbaasCredentials;
+use App\Http\Controllers\Dbaas\DestroyController as DbaasDestroy;
+use App\Http\Controllers\Dbaas\IndexController as DbaasIndex;
+use App\Http\Controllers\Dbaas\RestoreController as DbaasRestore;
+use App\Http\Controllers\Dbaas\ShowController as DbaasShow;
+use App\Http\Controllers\Dbaas\StartController as DbaasStart;
+use App\Http\Controllers\Dbaas\StopController as DbaasStop;
+use App\Http\Controllers\Dbaas\StoreController as DbaasStore;
+use App\Http\Controllers\Dbaas\UpgradeController as DbaasUpgrade;
+use App\Http\Controllers\ProxmoxNode\ActivateController as ProxmoxNodeActivate;
+use App\Http\Controllers\ProxmoxNode\CreateController as ProxmoxNodeCreate;
+use App\Http\Controllers\ProxmoxNode\DeactivateController as ProxmoxNodeDeactivate;
+use App\Http\Controllers\ProxmoxNode\DestroyController as ProxmoxNodeDestroy;
+use App\Http\Controllers\ProxmoxNode\EditController as ProxmoxNodeEdit;
+use App\Http\Controllers\ProxmoxNode\IndexController as ProxmoxNodeIndex;
+use App\Http\Controllers\ProxmoxNode\StoreController as ProxmoxNodeStore;
+use App\Http\Controllers\ProxmoxNode\UpdateController as ProxmoxNodeUpdate;
 use App\Http\Controllers\S3Credential\DestroyController as S3CredentialDestroy;
 use App\Http\Controllers\S3Credential\IndexController as S3CredentialIndex;
 use App\Http\Controllers\S3Credential\RotateController as S3CredentialRotate;
@@ -69,11 +90,38 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::post('/{vmid}/resize', VmResize::class)->name('resize');
             Route::delete('/{vmid}', VmDestroy::class)->name('destroy');
         });
+
+        Route::prefix('dbaas')->name('dbaas.')->group(function (): void {
+            Route::get('/', DbaasIndex::class)->name('index');
+            Route::get('/create', DbaasCreate::class)->name('create');
+            Route::post('/', DbaasStore::class)->name('store');
+            Route::get('/{database}', DbaasShow::class)->name('show');
+            Route::post('/{database}/start', DbaasStart::class)->name('start');
+            Route::post('/{database}/stop', DbaasStop::class)->name('stop');
+            Route::delete('/{database}', DbaasDestroy::class)->name('destroy');
+            Route::post('/{database}/backup', DbaasBackup::class)->name('backup');
+            Route::get('/{database}/backups', DbaasBackups::class)->name('backups');
+            Route::post('/{database}/restore', DbaasRestore::class)->name('restore');
+            Route::get('/{database}/credentials', DbaasCredentials::class)->name('credentials');
+            Route::post('/{database}/upgrade', DbaasUpgrade::class)->name('upgrade');
+        });
+
+        Route::prefix('proxmox-clusters')->name('proxmox-clusters.')->group(function (): void {
+            Route::get('/', ProxmoxNodeIndex::class)->name('index');
+            Route::get('/create', ProxmoxNodeCreate::class)->name('create');
+            Route::post('/', ProxmoxNodeStore::class)->name('store');
+            Route::get('/{proxmoxNode}/edit', ProxmoxNodeEdit::class)->name('edit');
+            Route::put('/{proxmoxNode}', ProxmoxNodeUpdate::class)->name('update');
+            Route::delete('/{proxmoxNode}', ProxmoxNodeDestroy::class)->name('destroy');
+            Route::post('/{proxmoxNode}/activate', ProxmoxNodeActivate::class)->name('activate');
+            Route::post('/{proxmoxNode}/deactivate', ProxmoxNodeDeactivate::class)->name('deactivate');
+        });
     });
 
     Route::prefix('api')->name('api.')->group(function (): void {
         Route::get('vms/{vmid}/status', ApiVmStatus::class)->name('vms.status');
         Route::get('nodes/status', ApiNodeStatus::class)->name('nodes.status');
+        Route::get('dbaas/{database}/status', ApiDbaasStatus::class)->name('dbaas.status');
     });
 });
 

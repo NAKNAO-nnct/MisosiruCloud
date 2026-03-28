@@ -5,6 +5,12 @@
 テナントネットワーク（Proxmox SDN VNet）の可視化・管理と、  
 外部 VPS ゲートウェイ（WireGuard VPN）の登録・状態管理を実装する。
 
+## 現在の判定（2026-03-28）
+
+❌ 未着手
+
+Network/VPS/DNS 管理機能（Service/Controller/View/Route/Test）は未実装。
+
 ---
 
 ## チェックポイント

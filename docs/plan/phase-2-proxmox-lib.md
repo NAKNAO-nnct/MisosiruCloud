@@ -5,6 +5,12 @@
 Proxmox VE の REST API を直接呼び出す自作ライブラリ (`App\Lib\Proxmox`) を実装する。  
 外部ライブラリに依存せず、HTTP レベルで API トークン認証を行う。
 
+## 現在の判定（2026-03-28）
+
+✅ 完了
+
+`Client` / `Resources` / `DataObjects` / 例外 / `ProxmoxApi` / DI バインディング / Phase2 テストまで実装済み。
+
 ---
 
 ## チェックポイント

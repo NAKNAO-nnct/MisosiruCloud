@@ -5,6 +5,12 @@
 Nomad + CNI を使ったマルチテナント対応コンテナ管理機能を実装する。  
 Lib/Nomad ライブラリの自作、コンテナデプロイ・Traefik 自動ルーティング連携。
 
+## 現在の判定（2026-03-28）
+
+❌ 未着手
+
+`App\\Lib\\Nomad`、Container 関連 Service/Controller/View/Route/Test は未実装。
+
 ---
 
 ## チェックポイント

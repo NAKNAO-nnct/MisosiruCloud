@@ -16,7 +16,7 @@ use Throwable;
 class VmService
 {
     public function __construct(
-        private readonly ProxmoxApi $api,
+        private readonly ?ProxmoxApi $api,
         private readonly VmMetaRepository $vmMetaRepository,
     ) {
     }
@@ -26,6 +26,10 @@ class VmService
      */
     public function listAllVms(): array
     {
+        if (!$this->api) {
+            return [];
+        }
+
         $nodes = $this->api->node()->listNodes();
         $vms = [];
 
@@ -46,6 +50,14 @@ class VmService
     public function getVmWithMeta(int $vmid): array
     {
         $meta = $this->vmMetaRepository->findByVmidWithTenant($vmid);
+
+        if (!$this->api) {
+            return [
+                'meta' => $meta,
+                'status' => null,
+                'node' => $meta?->getProxmoxNode(),
+            ];
+        }
 
         $node = $meta?->getProxmoxNode();
 
@@ -75,6 +87,8 @@ class VmService
      */
     public function provisionVm(TenantData $tenant, array $params): VmMetaData
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMetaData = DB::transaction(fn () => $this->vmMetaRepository->create([
             'tenant_id' => $tenant->getId(),
             'proxmox_vmid' => $params['new_vmid'],
@@ -130,6 +144,8 @@ class VmService
 
     public function terminateVm(VmMetaData $vmMeta): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         try {
             $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
         } catch (Throwable) {
@@ -142,36 +158,48 @@ class VmService
 
     public function startByVmid(int $vmid): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->startVm($vmMeta->getProxmoxNode(), $vmid);
     }
 
     public function stopByVmid(int $vmid): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->stopVm($vmMeta->getProxmoxNode(), $vmid);
     }
 
     public function forceStopByVmid(int $vmid): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmid);
     }
 
     public function rebootByVmid(int $vmid): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->rebootVm($vmMeta->getProxmoxNode(), $vmid);
     }
 
     public function resizeByVmid(int $vmid, string $disk, string $size): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->resizeVm($vmMeta->getProxmoxNode(), $vmid, $disk, $size);
     }
 
     public function createSnapshotByVmid(int $vmid, string $name): void
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $this->api->vm()->createSnapshot($vmMeta->getProxmoxNode(), $vmid, $name);
     }
@@ -181,8 +209,34 @@ class VmService
      */
     public function getVncProxyByVmid(int $vmid): array
     {
+        $this->ensureProxmoxApiConfigured();
+
         $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
 
         return $this->api->vm()->getVncProxy($vmMeta->getProxmoxNode(), $vmid);
+    }
+
+    /**
+     * Returns nodes and the next available VMID from Proxmox for use in provision forms.
+     *
+     * @return array{nodes: array<int, string>, nextVmid: int|null}
+     */
+    public function getFormOptions(): array
+    {
+        if (!$this->api) {
+            return ['nodes' => [], 'nextVmid' => null];
+        }
+
+        $nodes = array_column($this->api->node()->listNodes(), 'node');
+        $nextVmid = $this->api->cluster()->nextId();
+
+        return ['nodes' => $nodes, 'nextVmid' => $nextVmid];
+    }
+
+    private function ensureProxmoxApiConfigured(): void
+    {
+        if (!$this->api) {
+            throw new RuntimeException('No active Proxmox node configured.');
+        }
     }
 }

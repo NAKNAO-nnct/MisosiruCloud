@@ -5,6 +5,12 @@
 Proxmox VE 上の VM を管理する機能を実装する。  
 VM 一覧・詳細はリアルタイムで Proxmox API から取得。作成は Cloud-init テンプレートをクローンして自動設定。
 
+## 現在の判定（2026-03-28）
+
+✅ 完了
+
+VM 管理 Controller 群、`VmService`、Cloud-init 生成、内部 API、View、Unit/Feature テストまで実装済み。
+
 ---
 
 ## チェックポイント

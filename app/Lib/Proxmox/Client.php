@@ -8,6 +8,7 @@ use App\Lib\Proxmox\Exceptions\ProxmoxApiException;
 use App\Lib\Proxmox\Exceptions\ProxmoxAuthException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 
 class Client
 {
@@ -19,7 +20,7 @@ class Client
         private readonly string $tokenSecret,
         private readonly bool $verifyTls = true,
     ) {
-        $this->baseUrl = "https://{$hostname}:8006/api2/json";
+        $this->baseUrl = $this->resolveBaseUrl($hostname);
     }
 
     public function get(string $path, array $params = []): array
@@ -78,6 +79,49 @@ class Client
             throw new ProxmoxApiException("Proxmox API error: {$response->status()} - {$response->body()}", $response->status());
         }
 
-        return $response->json('data') ?? [];
+        $data = $response->json('data');
+
+        if (is_array($data)) {
+            return $data;
+        }
+
+        if ($data === null) {
+            return [];
+        }
+
+        if (is_string($data) && str_starts_with($data, 'UPID:')) {
+            return [
+                'upid' => $data,
+                'data' => $data,
+            ];
+        }
+
+        return ['data' => $data];
+    }
+
+    private function resolveBaseUrl(string $hostname): string
+    {
+        $input = mb_trim($hostname);
+
+        if ($input === '') {
+            throw new InvalidArgumentException('Proxmox hostname must not be empty.');
+        }
+
+        $endpoint = str_starts_with($input, 'http://') || str_starts_with($input, 'https://')
+            ? $input
+            : "https://{$input}";
+
+        $parts = parse_url($endpoint);
+
+        $scheme = $parts['scheme'] ?? 'https';
+        $host = $parts['host'] ?? '';
+
+        if ($host === '') {
+            throw new InvalidArgumentException('Invalid Proxmox hostname.');
+        }
+
+        $port = $parts['port'] ?? 8006;
+
+        return "{$scheme}://{$host}:{$port}/api2/json";
     }
 }

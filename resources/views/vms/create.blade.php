@@ -39,13 +39,19 @@
 
             <flux:field>
                 <flux:label>ノード</flux:label>
-                <flux:input name="node" value="{{ old('node') }}" placeholder="pve" />
+                <flux:select name="node">
+                    @forelse ($nodes as $nodeName)
+                        <flux:select.option value="{{ $nodeName }}" :selected="old('node') === $nodeName">{{ $nodeName }}</flux:select.option>
+                    @empty
+                        <flux:select.option value="">-- ノードが見つかりません --</flux:select.option>
+                    @endforelse
+                </flux:select>
                 <flux:error name="node" />
             </flux:field>
 
             <flux:field>
                 <flux:label>新しい VMID</flux:label>
-                <flux:input type="number" name="new_vmid" value="{{ old('new_vmid') }}" placeholder="200" />
+                <flux:input type="number" name="new_vmid" value="{{ old('new_vmid', $nextVmid) }}" placeholder="200" />
                 <flux:error name="new_vmid" />
             </flux:field>
 

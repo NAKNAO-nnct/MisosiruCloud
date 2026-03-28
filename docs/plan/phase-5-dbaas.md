@@ -5,6 +5,13 @@
 MySQL・PostgreSQL・Redis の DB インスタンスをテナント向けに提供する機能を実装する。  
 VM は Cloud-init で DB を自動セットアップ。バックアップは S3 に暗号化転送する。
 
+## 現在の判定（2026-03-28）
+
+⚠️ 部分実装
+
+`DbaasService` / `BackupService` と関連 Data/Repository は実装済み。  
+ただし、DBaaS Controller・Request・View・Route・専用テストは未実装。
+
 ---
 
 ## チェックポイント

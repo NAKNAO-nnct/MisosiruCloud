@@ -25,6 +25,15 @@
                         <flux:navlist.item icon="building-2" :href="route('tenants.index')" :current="request()->routeIs('tenants.*')">
                             テナント管理
                         </flux:navlist.item>
+                        <flux:navlist.item icon="folder-git-2" :href="route('vms.index')" :current="request()->routeIs('vms.*')">
+                            VM管理
+                        </flux:navlist.item>
+                        <flux:navlist.item icon="chevrons-up-down" :href="route('dbaas.index')" :current="request()->routeIs('dbaas.*')">
+                            DBaaS管理
+                        </flux:navlist.item>
+                        <flux:navlist.item icon="server" :href="route('proxmox-clusters.index')" :current="request()->routeIs('proxmox-clusters.*')">
+                            Proxmox クラスタ
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endif
             </flux:navlist>

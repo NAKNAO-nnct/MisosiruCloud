@@ -13,13 +13,19 @@ use Illuminate\Http\Request;
 class VmStatusController extends Controller
 {
     public function __construct(
-        private readonly ProxmoxApi $api,
+        private readonly ?ProxmoxApi $api,
         private readonly VmMetaRepository $vmMetaRepository,
     ) {
     }
 
     public function __invoke(Request $request, int $vmid): JsonResponse
     {
+        if (!$this->api) {
+            return response()->json([
+                'message' => 'No active Proxmox node configured.',
+            ], 503);
+        }
+
         $meta = $this->vmMetaRepository->findByVmidOrFail($vmid);
         $status = $this->api->vm()->getVmStatus($meta->getProxmoxNode(), $vmid);
 

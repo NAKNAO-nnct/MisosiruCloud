@@ -53,4 +53,11 @@ class Cluster
     {
         return $this->client->put('cluster/sdn');
     }
+
+    public function nextId(): int
+    {
+        $data = $this->client->get('cluster/nextid');
+
+        return (int) ($data['data'] ?? 0);
+    }
 }

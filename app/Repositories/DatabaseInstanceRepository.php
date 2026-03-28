@@ -6,6 +6,8 @@ namespace App\Repositories;
 
 use App\Data\Dbaas\DatabaseInstanceData;
 use App\Models\DatabaseInstance;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 
 class DatabaseInstanceRepository
 {
@@ -27,6 +29,29 @@ class DatabaseInstanceRepository
     public function countByTenantId(int $tenantId): int
     {
         return DatabaseInstance::query()->where('tenant_id', $tenantId)->count();
+    }
+
+    /**
+     * @return LengthAwarePaginator<DatabaseInstanceData>
+     */
+    public function paginate(int $perPage = 20): LengthAwarePaginator
+    {
+        /** @var LengthAwarePaginator<DatabaseInstanceData> $paginator */
+        return DatabaseInstance::query()
+            ->orderByDesc('created_at')
+            ->paginate($perPage)
+            ->through(fn (DatabaseInstance $db) => DatabaseInstanceData::of($db));
+    }
+
+    /**
+     * @return Collection<int, DatabaseInstanceData>
+     */
+    public function all(): Collection
+    {
+        return DatabaseInstance::query()
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (DatabaseInstance $db) => DatabaseInstanceData::of($db));
     }
 
     /**

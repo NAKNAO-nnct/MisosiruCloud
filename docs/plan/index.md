@@ -5,22 +5,22 @@
 Proxmox VE 3ノードクラスタ上のマルチテナント型クラウド管理パネル。  
 Laravel + Livewire + Flux UI によるサーバサイドレンダリングベース。外部公開 API なし。
 
-## 現在の実装状況
+## 現在の実装状況（2026-03-28 反映）
 
 | 領域 | 状態 | 備考 |
 |------|------|------|
 | Laravel インストール | ✅ 完了 | v13、PHP 8.5 |
-| 認証基盤 (Fortify) | ✅ ほぼ完了 | 2FA マイグレーション済み |
-| ユーザモデル | ✅ 完了 | — |
-| Proxmox ライブラリ | ❌ 未着手 | — |
-| テナント管理 | ❌ 未着手 | — |
-| VM 管理 | ❌ 未着手 | — |
-| DBaaS | ❌ 未着手 | — |
-| CaaS (Nomad 連携) | ❌ 未着手 | — |
-| ネットワーク管理 | ❌ 未着手 | — |
-| VPS ゲートウェイ管理 | ❌ 未着手 | — |
-| 監視・可観測性 | ❌ 未着手 | — |
-| スニペットサイドカーAPI | ❌ 未着手 | — |
+| 認証基盤 (Fortify) | ✅ 完了 | Fortify ルートでログイン/2FA 利用 |
+| ユーザモデル | ✅ 完了 | role / 権限制御込み |
+| Proxmox ライブラリ | ✅ 完了 | `App\\Lib\\Proxmox` 一式 + テストあり |
+| テナント管理 | ✅ 完了 | CRUD + S3 認証情報管理 + テストあり |
+| VM 管理 | ✅ 完了 | CRUD/操作/内部API/View/テストあり |
+| DBaaS | ⚠️ 部分実装 | Service/Data/Repository は実装済み、Controller/View/Route 未実装 |
+| CaaS (Nomad 連携) | ❌ 未着手 | `Lib\\Nomad` / Container 機能未実装 |
+| ネットワーク管理 | ❌ 未着手 | Network / VPS / DNS 管理機能未実装 |
+| VPS ゲートウェイ管理 | ❌ 未着手 | 未実装 |
+| 監視・可観測性 | ❌ 未着手 | Monitoring 機能未実装 |
+| スニペットサイドカーAPI | ❌ 未着手 | `snippet-api/` 未作成 |
 
 ---
 
@@ -40,16 +40,32 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 
 ---
 
-## 優先実装順序
+## 優先実装順序（進捗反映後）
 
 ```
-Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
-                              ↓
-                           Phase 6
-                  Phase 7 ────┘
-Phase 8 (Phase 1 後いつでも可)
-Phase 9 (Phase 2 後いつでも可)
+Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅ → Phase 4 ✅ → Phase 5 ⚠️
+                                           ↓
+                                        Phase 6 ❌
+                               Phase 7 ❌ ────┘
+Phase 8 ❌ (Phase 1 後いつでも可)
+Phase 9 ❌ (Phase 2 後いつでも可)
 ```
+
+---
+
+## フェーズ別進捗サマリ（2026-03-28）
+
+| フェーズ | 判定 | 実装状況（要約） |
+|---------|------|------------------|
+| Phase 1 | ✅ 完了 | マイグレーション/モデル/Enum/認証/ダッシュボード/権限テストまで実装 |
+| Phase 2 | ✅ 完了 | Proxmox Client・Resources・DataObjects・例外・バインディング・テスト実装 |
+| Phase 3 | ✅ 完了 | Tenant/S3 の Service/Controller/View/Request/Feature テスト実装 |
+| Phase 4 | ✅ 完了 | VM の Service/Controller/View/Internal API/Request/Unit+Feature テスト実装 |
+| Phase 5 | ⚠️ 部分実装 | `DbaasService`/`BackupService` と Data/Repository 実装済み。UI層未着手 |
+| Phase 6 | ❌ 未着手 | Nomad 連携（Lib/Service/Controller/View/Test）未着手 |
+| Phase 7 | ❌ 未着手 | Network/VPS/DNS 管理未着手 |
+| Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
+| Phase 9 | ❌ 未着手 | Python Sidecar API と `Lib\\Snippet` 未着手 |
 
 ---
 
