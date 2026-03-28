@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"s3-proxy/auth"
@@ -35,37 +36,27 @@ func NewHandler(verifier *auth.Verifier, credStore *auth.CredentialStore, backen
 
 // ServeHTTP handles incoming requests
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Verify credentials
 	cred, err := h.verifier.Verify(r)
 	if err != nil {
 		h.writeError(w, http.StatusForbidden, "InvalidSignature", err.Error())
 		return
 	}
 
-	// Check if request path matches allowed bucket and prefix
 	bucket, key, err := h.parsePath(r.RequestURI)
 	if err != nil || bucket != cred.AllowedBucket {
 		h.writeError(w, http.StatusForbidden, "AccessDenied", "Request does not match allowed bucket")
 		return
 	}
 
-	// Check for path traversal attacks
 	if strings.Contains(key, "..") || strings.HasPrefix(key, "/") {
 		h.writeError(w, http.StatusForbidden, "AccessDenied", "Invalid key path")
 		return
 	}
 
-	// Check allowed prefix
-	if !strings.HasPrefix(key, cred.AllowedPrefix) && cred.AllowedPrefix != "/" {
-		h.writeError(w, http.StatusForbidden, "AccessDenied", "Key does not match allowed prefix")
-		return
-	}
-
-	// Rewrite path with tenant prefix
 	newKey := h.rewritePath(key, cred)
+	newQuery := h.rewriteListPrefix(r.URL.RawQuery, cred)
 
-	// Forward request to backend S3
-	if err := h.forwardRequest(w, r, bucket, newKey, cred); err != nil {
+	if err := h.forwardRequest(w, r, bucket, newKey, newQuery, cred); err != nil {
 		h.writeError(w, http.StatusInternalServerError, "InternalError", err.Error())
 		return
 	}
@@ -73,102 +64,104 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // parsePath extracts bucket and key from request URI
 func (h *Handler) parsePath(requestURI string) (bucket, key string, err error) {
-	// Remove query string
 	path := strings.Split(requestURI, "?")[0]
-
-	// Split path: /bucket/key or /bucket/
 	parts := strings.SplitN(path, "/", 3)
 	if len(parts) < 2 {
 		return "", "", fmt.Errorf("invalid path")
 	}
-
 	bucket = parts[1]
 	if len(parts) == 3 {
 		key = parts[2]
 	}
-
 	return bucket, key, nil
 }
 
-// rewritePath inserts tenant prefix into the object key
+// rewritePath inserts tenant prefix and allowed prefix into the object key.
+// Example: "test/file.txt" with allowed_prefix "data/" -> "tenant-1/data/test/file.txt"
 func (h *Handler) rewritePath(key string, cred *auth.Credential) string {
-	// Insert tenant prefix
-	// Example: file.txt -> tenant-1/file.txt
-	// Example: dir/file.txt -> tenant-1/dir/file.txt
-	tenantPrefix := fmt.Sprintf("tenant-%d", cred.TenantID)
-	if key == "" {
-		return tenantPrefix + "/"
+	tenantPrefix := fmt.Sprintf("tenant-%d/", cred.TenantID)
+	allowedPrefix := cred.AllowedPrefix
+	if allowedPrefix != "/" && !strings.HasSuffix(allowedPrefix, "/") {
+		allowedPrefix += "/"
 	}
-	return tenantPrefix + "/" + key
+	if allowedPrefix == "/" {
+		allowedPrefix = ""
+	}
+	if key == "" {
+		return tenantPrefix + allowedPrefix
+	}
+	return tenantPrefix + allowedPrefix + key
+}
+
+// rewriteListPrefix injects the tenant prefix and allowed prefix into the ?prefix= query parameter
+// for ListObjectsV2 operations so tenants only see their own objects within their allowed prefix.
+func (h *Handler) rewriteListPrefix(rawQuery string, cred *auth.Credential) string {
+	q, err := url.ParseQuery(rawQuery)
+	if err != nil || q.Get("list-type") == "" {
+		return rawQuery
+	}
+	tenantPrefix := fmt.Sprintf("tenant-%d/", cred.TenantID)
+	allowedPrefix := cred.AllowedPrefix
+	if allowedPrefix != "/" && !strings.HasSuffix(allowedPrefix, "/") {
+		allowedPrefix += "/"
+	}
+	if allowedPrefix == "/" {
+		allowedPrefix = ""
+	}
+	fullPrefix := tenantPrefix + allowedPrefix
+	existing := q.Get("prefix")
+	if strings.HasPrefix(existing, fullPrefix) {
+		return rawQuery
+	}
+	q.Set("prefix", fullPrefix+existing)
+	return q.Encode()
 }
 
 // forwardRequest forwards the request to the backend S3 service
-func (h *Handler) forwardRequest(w http.ResponseWriter, r *http.Request, bucket, key string, cred *auth.Credential) error {
-	// Build backend URL
+func (h *Handler) forwardRequest(w http.ResponseWriter, r *http.Request, bucket, key, rawQuery string, cred *auth.Credential) error {
 	backendReqURL := fmt.Sprintf("%s/%s/%s", h.backendURL, bucket, key)
-
-	// Preserve query string
-	if r.URL.RawQuery != "" {
-		backendReqURL += "?" + r.URL.RawQuery
+	if rawQuery != "" {
+		backendReqURL += "?" + rawQuery
 	}
 
-	// Create backend request
 	backendReq, err := http.NewRequest(r.Method, backendReqURL, r.Body)
 	if err != nil {
 		return fmt.Errorf("failed to create backend request: %w", err)
 	}
-
-	// Preserve Content-Length so minio doesn't reject with MissingContentLength
 	backendReq.ContentLength = r.ContentLength
 
-	// Copy headers from original request (except Authorization)
-	for key, values := range r.Header {
-		if key == "Authorization" {
+	for k, values := range r.Header {
+		if k == "Authorization" {
 			continue
 		}
 		for _, value := range values {
-			backendReq.Header.Add(key, value)
+			backendReq.Header.Add(k, value)
 		}
 	}
-
-	// Update host
 	backendReq.Host = ""
 	backendReq.Header.Set("Host", r.Host)
 
-	// Sign request with backend credentials
 	signer := NewSigner(h.backendAccessKey, h.backendSecretKey, h.backendRegion)
 	if err := signer.Sign(backendReq); err != nil {
 		return fmt.Errorf("failed to sign backend request: %w", err)
 	}
 
-	// Send request to backend
 	resp, err := h.client.Do(backendReq)
 	if err != nil {
 		return fmt.Errorf("failed to forward request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers
-	for key, values := range resp.Header {
+	for k, values := range resp.Header {
 		for _, value := range values {
-			w.Header().Add(key, value)
+			w.Header().Add(k, value)
 		}
 	}
-
-	// Set status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Copy response body
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		return fmt.Errorf("failed to copy response body: %w", err)
 	}
-
-	// Update last used timestamp in database (async, non-blocking)
-	go func() {
-		// This would update the credential's last_used_at timestamp
-		// For now, we'll skip this as it requires access to the database store
-	}()
-
 	return nil
 }
 

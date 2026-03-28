@@ -1,5 +1,17 @@
 {
     "preset": "laravel",
+    "exclude": [
+        "vendor",
+        "node_modules",
+        "storage",
+        "bootstrap",
+        "public",
+        "docker",
+        "docs",
+        "s3-proxy",
+        "snippet-api",
+        ".venv"
+    ],
     "rules": {
         "align_multiline_comment": {
             "comment_type": "phpdocs_like"

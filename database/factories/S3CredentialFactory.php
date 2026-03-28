@@ -22,7 +22,7 @@ class S3CredentialFactory extends Factory
         return [
             'tenant_id' => Tenant::factory(),
             'access_key' => 'MSIR' . mb_strtoupper(Str::random(16)),
-            'secret_key_encrypted' => Str::random(40),
+            'secret_key_plain' => Str::random(40),
             'allowed_bucket' => 'dbaas-backups',
             'allowed_prefix' => fake()->slug() . '/',
             'description' => fake()->sentence(),
