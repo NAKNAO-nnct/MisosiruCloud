@@ -1,0 +1,73 @@
+# 実装計画書 - おうちクラウドサービス管理パネル
+
+## プロジェクト概要
+
+Proxmox VE 3ノードクラスタ上のマルチテナント型クラウド管理パネル。  
+Laravel + Livewire + Flux UI によるサーバサイドレンダリングベース。外部公開 API なし。
+
+## 現在の実装状況
+
+| 領域 | 状態 | 備考 |
+|------|------|------|
+| Laravel インストール | ✅ 完了 | v13、PHP 8.5 |
+| 認証基盤 (Fortify) | ✅ ほぼ完了 | 2FA マイグレーション済み |
+| ユーザモデル | ✅ 完了 | — |
+| Proxmox ライブラリ | ❌ 未着手 | — |
+| テナント管理 | ❌ 未着手 | — |
+| VM 管理 | ❌ 未着手 | — |
+| DBaaS | ❌ 未着手 | — |
+| CaaS (Nomad 連携) | ❌ 未着手 | — |
+| ネットワーク管理 | ❌ 未着手 | — |
+| VPS ゲートウェイ管理 | ❌ 未着手 | — |
+| 監視・可観測性 | ❌ 未着手 | — |
+| スニペットサイドカーAPI | ❌ 未着手 | — |
+
+---
+
+## フェーズ一覧
+
+| フェーズ | ファイル | 内容 | 依存 |
+|---------|---------|------|------|
+| Phase 1 | [phase-1-foundation.md](phase-1-foundation.md) | 基盤：DB マイグレーション・モデル・認証・ルーティング・UI レイアウト | なし |
+| Phase 2 | [phase-2-proxmox-lib.md](phase-2-proxmox-lib.md) | Lib/Proxmox：自作 HTTP クライアント・全リソース操作 | Phase 1 |
+| Phase 3 | [phase-3-tenant.md](phase-3-tenant.md) | テナント管理：CRUD・SDN VNet 作成・S3 認証情報自動発行 | Phase 1, 2 |
+| Phase 4 | [phase-4-vm.md](phase-4-vm.md) | VM 管理：一覧・詳細・起動/停止・Cloud-init デプロイ・VNC コンソール | Phase 1, 2, 3 |
+| Phase 5 | [phase-5-dbaas.md](phase-5-dbaas.md) | DBaaS：DB VM プロビジョニング・バックアップ・バージョンアップグレード | Phase 4 |
+| Phase 6 | [phase-6-caas.md](phase-6-caas.md) | CaaS：Nomad ライブラリ・コンテナデプロイ・Traefik 連携 | Phase 3, 4 |
+| Phase 7 | [phase-7-network-vps.md](phase-7-network-vps.md) | ネットワーク管理・VPS ゲートウェイ管理 | Phase 2, 3 |
+| Phase 8 | [phase-8-monitoring.md](phase-8-monitoring.md) | 監視・可観測性：Grafana Cloud 埋め込み・OTel 連携 | Phase 1 |
+| Phase 9 | [phase-9-sidecar-api.md](phase-9-sidecar-api.md) | スニペットサイドカー API (Python / FastAPI)・Snippet クライアント | Phase 2 |
+
+---
+
+## 優先実装順序
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
+                              ↓
+                           Phase 6
+                  Phase 7 ────┘
+Phase 8 (Phase 1 後いつでも可)
+Phase 9 (Phase 2 後いつでも可)
+```
+
+---
+
+## 共通チェックポイント（全フェーズ共通）
+
+各フェーズ完了時に以下を確認する：
+
+- [ ] `vendor/bin/pint --dirty --format agent` を実行してコードスタイルを統一
+- [ ] 関連するテスト (`php artisan test --compact`) がすべてパスしていること
+- [ ] マイグレーションが正常に実行できること (`php artisan migrate:fresh --seed`)
+- [ ] ルートが意図通りに登録されていること (`php artisan route:list`)
+
+---
+
+## 参考ドキュメント
+
+- [detailed-design.md](../detailed-design.md) — ディレクトリ構成・Lib設計・フロー図
+- [database-design.md](../database-design.md) — テーブル定義・ER図
+- [api-design.md](../api-design.md) — Web ルート一覧・画面一覧
+- [infrastructure-design.md](../infrastructure-design.md) — インフラ構成
+- [やりたいこと.md](../やりたいこと.md) — 機能要件
