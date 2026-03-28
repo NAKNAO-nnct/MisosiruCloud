@@ -15,7 +15,7 @@ return new class() extends Migration
             $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('proxmox_vmid')->unique();
             $table->string('proxmox_node', 50);
-            $table->string('purpose', 50);
+            $table->string('purpose', 50)->nullable();
             $table->string('label')->nullable();
             $table->string('shared_ip_address', 45)->nullable();
             $table->enum('provisioning_status', ['pending', 'cloning', 'configuring', 'starting', 'ready', 'error'])->default('pending');

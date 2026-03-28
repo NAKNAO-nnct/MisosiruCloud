@@ -1,0 +1,28 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\Vm;
+
+use App\Http\Controllers\Controller;
+use App\Lib\Proxmox\ProxmoxApi;
+use App\Models\VmMeta;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+
+class SnapshotController extends Controller
+{
+    public function __construct(private readonly ProxmoxApi $api)
+    {
+    }
+
+    public function __invoke(Request $request, int $vmid): RedirectResponse
+    {
+        $request->validate(['name' => ['required', 'string', 'max:64', 'alpha_dash']]);
+
+        $meta = VmMeta::where('proxmox_vmid', $vmid)->firstOrFail();
+        $this->api->vm()->createSnapshot($meta->proxmox_node, $vmid, $request->string('name')->toString());
+
+        return redirect()->route('vms.show', $vmid)->with('success', 'スナップショットを作成しました。');
+    }
+}
