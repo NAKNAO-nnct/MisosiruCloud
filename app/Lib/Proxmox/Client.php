@@ -65,7 +65,7 @@ class Client
 
     private function url(string $path): string
     {
-        return $this->baseUrl . '/' . ltrim($path, '/');
+        return $this->baseUrl . '/' . mb_ltrim($path, '/');
     }
 
     private function handleResponse(Response $response): array

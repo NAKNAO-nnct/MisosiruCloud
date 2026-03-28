@@ -8,6 +8,7 @@ use App\Lib\Proxmox\Client as ProxmoxClient;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Models\ProxmoxNode;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -43,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Blade::anonymousComponentNamespace('components.layouts', 'layouts');
         $this->configureDefaults();
     }
 
