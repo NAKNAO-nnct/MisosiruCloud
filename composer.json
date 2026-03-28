@@ -85,6 +85,9 @@
         ],
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
+        ],
+        "pint-fix": [
+            "pint --config pint.json app database/ tests/ routes/"
         ]
     },
     "extra": {

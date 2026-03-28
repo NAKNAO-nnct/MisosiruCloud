@@ -1,7 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Providers;
 
+use App\Lib\Proxmox\Client as ProxmoxClient;
+use App\Lib\Proxmox\ProxmoxApi;
+use App\Models\ProxmoxNode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +20,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(ProxmoxApi::class, function (): ?ProxmoxApi {
+            $node = ProxmoxNode::where('is_active', true)->first();
+
+            if (! $node) {
+                return null;
+            }
+
+            $client = new ProxmoxClient(
+                hostname: $node->hostname,
+                tokenId: $node->api_token_id,
+                tokenSecret: $node->api_token_secret_encrypted,
+                verifyTls: ! app()->isLocal(),
+            );
+
+            return new ProxmoxApi($client);
+        });
     }
 
     /**
@@ -37,7 +57,8 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
+        Password::defaults(
+            fn (): ?Password => app()->isProduction()
             ? Password::min(12)
                 ->mixedCase()
                 ->letters()
