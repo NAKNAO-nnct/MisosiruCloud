@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Data\User\AuthUserData;
 use App\Lib\Proxmox\Client as ProxmoxClient;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Models\ProxmoxNode;
@@ -11,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -45,6 +47,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Blade::anonymousComponentNamespace('components.layouts', 'layouts');
+        View::composer('components.layouts.app', function ($view): void {
+            $user = auth()->user();
+
+            $view->with('authUser', $user ? AuthUserData::of($user) : null);
+        });
         $this->configureDefaults();
     }
 

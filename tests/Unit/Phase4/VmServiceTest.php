@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Lib\Proxmox\Resources\Node;
 use App\Lib\Proxmox\Resources\Vm;
+use App\Repositories\VmMetaRepository;
 use App\Services\VmService;
 
 test('listAllVms が複数ノードのレスポンスを正しく集約する', function (): void {
@@ -27,7 +28,7 @@ test('listAllVms が複数ノードのレスポンスを正しく集約する', 
     $api->shouldReceive('node')->andReturn($nodeResource);
     $api->shouldReceive('vm')->andReturn($vmResource);
 
-    $service = new VmService($api);
+    $service = new VmService($api, new VmMetaRepository());
     $vms = $service->listAllVms();
 
     expect($vms)->toHaveCount(3);
@@ -44,7 +45,7 @@ test('listAllVms がノード 0 件のとき空配列を返す', function (): vo
     $api = Mockery::mock(ProxmoxApi::class);
     $api->shouldReceive('node')->andReturn($nodeResource);
 
-    $service = new VmService($api);
+    $service = new VmService($api, new VmMetaRepository());
     $vms = $service->listAllVms();
 
     expect($vms)->toBeEmpty();

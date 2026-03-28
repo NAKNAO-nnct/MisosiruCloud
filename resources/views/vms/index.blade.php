@@ -29,10 +29,10 @@
                         <flux:table.cell>{{ $vm['vmid'] }}</flux:table.cell>
                         <flux:table.cell>{{ $vm['name'] ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $vm['node'] ?? '-' }}</flux:table.cell>
-                        <flux:table.cell>{{ $meta?->tenant?->name ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ $meta?->getTenantName() ?? '-' }}</flux:table.cell>
                         <flux:table.cell>
                             @if ($meta)
-                                <x-vm-status-badge :status="$meta->provisioning_status" />
+                                <x-vm-status-badge :status="$meta->getProvisioningStatus()" />
                             @else
                                 <flux:badge variant="zinc">{{ $vm['status'] ?? '不明' }}</flux:badge>
                             @endif

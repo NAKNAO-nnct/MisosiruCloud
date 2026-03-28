@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Models\Tenant;
 use App\Services\CloudInit\CloudInitBuilder;
 
 test('buildUserData が #cloud-config ヘッダーを含む YAML を返す', function (): void {
@@ -36,8 +35,7 @@ test('buildUserData に runcmd を渡すと runcmd セクションが生成さ�
 
 test('buildNetworkConfig が network: キーを含む YAML を返す', function (): void {
     $builder = new CloudInitBuilder();
-    $tenant = Mockery::mock(Tenant::class);
-    $yaml = $builder->buildNetworkConfig($tenant, '10.1.0.10', '10.1.0.1');
+    $yaml = $builder->buildNetworkConfig('10.1.0.10', '10.1.0.1');
 
     expect($yaml)
         ->toContain('network:')

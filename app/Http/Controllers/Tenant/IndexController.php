@@ -5,18 +5,20 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
-use App\Models\Tenant;
+use App\Repositories\TenantRepository;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class IndexController extends Controller
 {
+    public function __construct(private readonly TenantRepository $tenantRepository)
+    {
+    }
+
     public function __invoke(Request $request): View
     {
-        $tenants = Tenant::query()
-            ->when($request->search, fn ($q, $search) => $q->where('name', 'like', "%{$search}%")->orWhere('slug', 'like', "%{$search}%"))
-            ->orderByDesc('created_at')
-            ->paginate(20)
+        $tenants = $this->tenantRepository
+            ->paginate($request->string('search')->toString() ?: null)
             ->withQueryString();
 
         return view('tenants.index', compact('tenants'));

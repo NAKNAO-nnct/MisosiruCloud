@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\CloudInit;
 
-use App\Models\Tenant;
-
 class CloudInitBuilder
 {
     /**
@@ -36,7 +34,7 @@ class CloudInitBuilder
         return implode("\n", $lines) . "\n";
     }
 
-    public function buildNetworkConfig(Tenant $tenant, string $ip, string $gateway): string
+    public function buildNetworkConfig(string $ip, string $gateway): string
     {
         return implode("\n", [
             'network:',

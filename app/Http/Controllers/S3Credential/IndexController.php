@@ -5,16 +5,24 @@ declare(strict_types=1);
 namespace App\Http\Controllers\S3Credential;
 
 use App\Http\Controllers\Controller;
-use App\Models\Tenant;
+use App\Repositories\S3CredentialRepository;
+use App\Repositories\TenantRepository;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class IndexController extends Controller
 {
-    public function __invoke(Request $request, Tenant $tenant): View
-    {
-        $credentials = $tenant->s3Credentials()->orderByDesc('created_at')->paginate(20);
+    public function __construct(
+        private readonly TenantRepository $tenantRepository,
+        private readonly S3CredentialRepository $s3CredentialRepository,
+    ) {
+    }
 
-        return view('s3_credentials.index', compact('tenant', 'credentials'));
+    public function __invoke(Request $request, int $tenant): View
+    {
+        $tenantData = $this->tenantRepository->findByIdOrFail($tenant);
+        $credentials = $this->s3CredentialRepository->paginateByTenantId($tenant);
+
+        return view('s3_credentials.index', ['tenant' => $tenantData, 'credentials' => $credentials]);
     }
 }

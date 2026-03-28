@@ -1,8 +1,8 @@
 <x-layouts::app :title="__('VM コンソール')">
     <div class="flex flex-col gap-4">
         <div class="flex items-center justify-between">
-            <flux:heading size="xl">{{ $meta->label }} — コンソール</flux:heading>
-            <flux:button href="{{ route('vms.show', $meta->proxmox_vmid) }}" variant="ghost" size="sm">
+            <flux:heading size="xl">{{ $meta->getLabel() }} — コンソール</flux:heading>
+            <flux:button href="{{ route('vms.show', $meta->getProxmoxVmid()) }}" variant="ghost" size="sm">
                 ← VM 詳細へ
             </flux:button>
         </div>
@@ -15,7 +15,7 @@
                 data-host="{{ $vncProxy['host'] ?? '' }}"
                 data-port="{{ $vncProxy['port'] ?? '' }}"
                 data-ticket="{{ $vncProxy['ticket'] ?? '' }}"
-                data-vmid="{{ $meta->proxmox_vmid }}"
+                data-vmid="{{ $meta->getProxmoxVmid() }}"
             >
                 <p class="p-4 text-sm text-zinc-400">
                     VNC コンソールに接続中... JavaScript が有効である必要があります。

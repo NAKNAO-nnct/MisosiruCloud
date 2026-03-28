@@ -1,11 +1,11 @@
-<x-layouts::app :title="'S3認証情報 - ' . $tenant->name">
+<x-layouts::app :title="'S3認証情報 - ' . $tenant->getName()">
     <div class="flex flex-col gap-4">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <flux:button href="{{ route('tenants.show', $tenant) }}" variant="ghost" size="sm" icon="arrow-left">
+                <flux:button href="{{ route('tenants.show', $tenant->getId()) }}" variant="ghost" size="sm" icon="arrow-left">
                     テナント詳細へ戻る
                 </flux:button>
-                <flux:heading size="xl">S3認証情報 — {{ $tenant->name }}</flux:heading>
+                <flux:heading size="xl">S3認証情報 — {{ $tenant->getName() }}</flux:heading>
             </div>
         </div>
 
@@ -17,7 +17,7 @@
 
         <flux:card>
             <flux:heading size="lg">新しい認証情報を追加</flux:heading>
-            <form method="POST" action="{{ route('tenants.s3-credentials.store', $tenant) }}"
+            <form method="POST" action="{{ route('tenants.s3-credentials.store', $tenant->getId()) }}"
                 class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                 @csrf
                 <flux:field>
@@ -27,7 +27,7 @@
                 </flux:field>
                 <flux:field>
                     <flux:label>プレフィックス <span class="text-red-500">*</span></flux:label>
-                    <flux:input name="allowed_prefix" value="{{ old('allowed_prefix', $tenant->slug . '/') }}" required />
+                    <flux:input name="allowed_prefix" value="{{ old('allowed_prefix', $tenant->getSlug() . '/') }}" required />
                     <flux:error name="allowed_prefix" />
                 </flux:field>
                 <flux:field>
@@ -51,21 +51,21 @@
             <flux:table.rows>
                 @forelse ($credentials as $credential)
                     <flux:table.row>
-                        <flux:table.cell class="font-mono text-sm">{{ $credential->access_key }}</flux:table.cell>
-                        <flux:table.cell class="text-sm">{{ $credential->allowed_bucket }}/{{ $credential->allowed_prefix }}</flux:table.cell>
-                        <flux:table.cell>{{ $credential->description ?? '-' }}</flux:table.cell>
+                        <flux:table.cell class="font-mono text-sm">{{ $credential->getAccessKey() }}</flux:table.cell>
+                        <flux:table.cell class="text-sm">{{ $credential->getAllowedBucket() }}/{{ $credential->getAllowedPrefix() }}</flux:table.cell>
+                        <flux:table.cell>{{ $credential->getDescription() ?? '-' }}</flux:table.cell>
                         <flux:table.cell>
-                            <flux:badge variant="{{ $credential->is_active ? 'lime' : 'zinc' }}">
-                                {{ $credential->is_active ? '有効' : '無効' }}
+                            <flux:badge variant="{{ $credential->isActive() ? 'lime' : 'zinc' }}">
+                                {{ $credential->isActive() ? '有効' : '無効' }}
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>
                             <div class="flex gap-2">
-                                <flux:button href="{{ route('tenants.s3-credentials.show', [$tenant, $credential]) }}" size="sm" variant="ghost">
+                                <flux:button href="{{ route('tenants.s3-credentials.show', [$tenant->getId(), $credential->getId()]) }}" size="sm" variant="ghost">
                                     詳細
                                 </flux:button>
-                                @if ($credential->is_active)
-                                    <form method="POST" action="{{ route('tenants.s3-credentials.destroy', [$tenant, $credential]) }}">
+                                @if ($credential->isActive())
+                                    <form method="POST" action="{{ route('tenants.s3-credentials.destroy', [$tenant->getId(), $credential->getId()]) }}">
                                         @csrf
                                         @method('DELETE')
                                         <flux:button type="submit" size="sm" variant="danger">無効化</flux:button>

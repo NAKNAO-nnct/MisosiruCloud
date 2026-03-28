@@ -10,8 +10,8 @@
                 <flux:select name="tenant_id">
                     <flux:select.option value="">-- 選択してください --</flux:select.option>
                     @foreach ($tenants as $tenant)
-                        <flux:select.option value="{{ $tenant->id }}" :selected="old('tenant_id') == $tenant->id">
-                            {{ $tenant->name }}
+                        <flux:select.option value="{{ $tenant->getId() }}" :selected="old('tenant_id') == $tenant->getId()">
+                            {{ $tenant->getName() }}
                         </flux:select.option>
                     @endforeach
                 </flux:select>

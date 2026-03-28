@@ -28,17 +28,17 @@
             <flux:table.rows>
                 @forelse ($tenants as $tenant)
                     <flux:table.row>
-                        <flux:table.cell>{{ $tenant->name }}</flux:table.cell>
-                        <flux:table.cell>{{ $tenant->slug }}</flux:table.cell>
+                        <flux:table.cell>{{ $tenant->getName() }}</flux:table.cell>
+                        <flux:table.cell>{{ $tenant->getSlug() }}</flux:table.cell>
                         <flux:table.cell>
-                            <flux:badge variant="{{ $tenant->status->value === 'active' ? 'lime' : 'red' }}">
-                                {{ $tenant->status->value }}
+                            <flux:badge variant="{{ $tenant->getStatus()->value === 'active' ? 'lime' : 'red' }}">
+                                {{ $tenant->getStatus()->value }}
                             </flux:badge>
                         </flux:table.cell>
-                        <flux:table.cell>{{ $tenant->vnet_name ?? '-' }}</flux:table.cell>
-                        <flux:table.cell>{{ $tenant->created_at->format('Y/m/d') }}</flux:table.cell>
+                        <flux:table.cell>{{ $tenant->getVnetName() ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ $tenant->getCreatedAt()?->format('Y/m/d') ?? '-' }}</flux:table.cell>
                         <flux:table.cell>
-                            <flux:button href="{{ route('tenants.show', $tenant) }}" size="sm" variant="ghost">
+                            <flux:button href="{{ route('tenants.show', $tenant->getId()) }}" size="sm" variant="ghost">
                                 詳細
                             </flux:button>
                         </flux:table.cell>

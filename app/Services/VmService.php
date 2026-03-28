@@ -4,18 +4,21 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Data\Tenant\TenantData;
+use App\Data\Vm\VmMetaData;
 use App\Enums\VmStatus;
 use App\Lib\Proxmox\ProxmoxApi;
-use App\Models\Tenant;
-use App\Models\VmMeta;
+use App\Repositories\VmMetaRepository;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
 class VmService
 {
-    public function __construct(private readonly ProxmoxApi $api)
-    {
+    public function __construct(
+        private readonly ProxmoxApi $api,
+        private readonly VmMetaRepository $vmMetaRepository,
+    ) {
     }
 
     /**
@@ -42,12 +45,9 @@ class VmService
      */
     public function getVmWithMeta(int $vmid): array
     {
-        $meta = VmMeta::query()
-            ->where('proxmox_vmid', $vmid)
-            ->with('tenant')
-            ->first();
+        $meta = $this->vmMetaRepository->findByVmidWithTenant($vmid);
 
-        $node = $meta?->proxmox_node;
+        $node = $meta?->getProxmoxNode();
 
         $nodes = $node ? [$node] : array_column($this->api->node()->listNodes(), 'node');
         $vmStatus = null;
@@ -73,10 +73,10 @@ class VmService
     /**
      * @param array<string, mixed> $params
      */
-    public function provisionVm(Tenant $tenant, array $params): VmMeta
+    public function provisionVm(TenantData $tenant, array $params): VmMetaData
     {
-        $vmMeta = DB::transaction(fn () => VmMeta::create([
-            'tenant_id' => $tenant->id,
+        $vmMetaData = DB::transaction(fn () => $this->vmMetaRepository->create([
+            'tenant_id' => $tenant->getId(),
             'proxmox_vmid' => $params['new_vmid'],
             'proxmox_node' => $params['node'],
             'purpose' => $params['purpose'] ?? null,
@@ -85,7 +85,7 @@ class VmService
         ]));
 
         try {
-            $vmMeta->update(['provisioning_status' => VmStatus::Cloning]);
+            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Cloning]);
 
             $upid = $this->api->vm()->cloneVm($params['node'], (int) $params['template_vmid'], [
                 'newid' => $params['new_vmid'],
@@ -95,7 +95,7 @@ class VmService
 
             $this->api->vm()->waitForTask($params['node'], $upid);
 
-            $vmMeta->update(['provisioning_status' => VmStatus::Configuring]);
+            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Configuring]);
 
             $config = array_filter([
                 'cores' => $params['cpu'] ?? null,
@@ -110,14 +110,14 @@ class VmService
                 $this->api->vm()->resizeVm($params['node'], (int) $params['new_vmid'], 'scsi0', "+{$params['disk_gb']}G");
             }
 
-            $vmMeta->update(['provisioning_status' => VmStatus::Starting]);
+            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Starting]);
 
             $upid = $this->api->vm()->startVm($params['node'], (int) $params['new_vmid']);
             $this->api->vm()->waitForTask($params['node'], $upid);
 
-            $vmMeta->update(['provisioning_status' => VmStatus::Ready]);
+            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Ready]);
         } catch (Throwable $e) {
-            $vmMeta->update([
+            $this->vmMetaRepository->update($vmMetaData->getId(), [
                 'provisioning_status' => VmStatus::Error,
                 'provisioning_error' => $e->getMessage(),
             ]);
@@ -125,19 +125,64 @@ class VmService
             throw new RuntimeException("VM provisioning failed: {$e->getMessage()}", 0, $e);
         }
 
-        return $vmMeta->refresh();
+        return $this->vmMetaRepository->findByIdOrFail($vmMetaData->getId());
     }
 
-    public function terminateVm(VmMeta $vmMeta): void
+    public function terminateVm(VmMetaData $vmMeta): void
     {
         try {
-            $this->api->vm()->forceStopVm($vmMeta->proxmox_node, (int) $vmMeta->proxmox_vmid);
+            $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
         } catch (Throwable) {
             // VM may already be stopped
         }
 
-        $this->api->vm()->deleteVm($vmMeta->proxmox_node, (int) $vmMeta->proxmox_vmid);
-        $vmMeta->delete();
+        $this->api->vm()->deleteVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
+        $this->vmMetaRepository->delete($vmMeta->getId());
+    }
+
+    public function startByVmid(int $vmid): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->startVm($vmMeta->getProxmoxNode(), $vmid);
+    }
+
+    public function stopByVmid(int $vmid): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->stopVm($vmMeta->getProxmoxNode(), $vmid);
+    }
+
+    public function forceStopByVmid(int $vmid): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmid);
+    }
+
+    public function rebootByVmid(int $vmid): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->rebootVm($vmMeta->getProxmoxNode(), $vmid);
+    }
+
+    public function resizeByVmid(int $vmid, string $disk, string $size): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->resizeVm($vmMeta->getProxmoxNode(), $vmid, $disk, $size);
+    }
+
+    public function createSnapshotByVmid(int $vmid, string $name): void
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+        $this->api->vm()->createSnapshot($vmMeta->getProxmoxNode(), $vmid, $name);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getVncProxyByVmid(int $vmid): array
+    {
+        $vmMeta = $this->vmMetaRepository->findByVmidOrFail($vmid);
+
+        return $this->api->vm()->getVncProxy($vmMeta->getProxmoxNode(), $vmid);
     }
 }
-

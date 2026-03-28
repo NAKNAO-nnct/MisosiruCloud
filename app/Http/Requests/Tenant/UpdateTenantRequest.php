@@ -19,7 +19,7 @@ class UpdateTenantRequest extends FormRequest
      */
     public function rules(): array
     {
-        $tenantId = $this->route('tenant')?->id;
+        $tenantId = (int) $this->route('tenant');
 
         return [
             'name' => ['required', 'string', 'max:255'],

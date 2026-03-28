@@ -7,10 +7,11 @@ use App\Lib\Proxmox\ProxmoxApi;
 use App\Models\S3Credential;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Repositories\S3CredentialRepository;
 use App\Services\S3CredentialService;
 
 beforeEach(function (): void {
-    $this->app->instance(ProxmoxApi::class, null);
+    app()->instance(ProxmoxApi::class, null);
 });
 
 test('S3認証情報を追加作成できる', function (): void {
@@ -31,7 +32,7 @@ test('S3認証情報を追加作成できる', function (): void {
 });
 
 test('S3アクセスキーはMSIRプレフィックスで始まる', function (): void {
-    $service = new S3CredentialService();
+    $service = new S3CredentialService(new S3CredentialRepository());
     $key = $service->generateAccessKey();
 
     expect($key)->toStartWith('MSIR')
@@ -39,7 +40,7 @@ test('S3アクセスキーはMSIRプレフィックスで始まる', function ()
 });
 
 test('S3シークレットキーは40文字', function (): void {
-    $service = new S3CredentialService();
+    $service = new S3CredentialService(new S3CredentialRepository());
     $secret = $service->generateSecretKey();
 
     expect(mb_strlen($secret))->toBe(40);

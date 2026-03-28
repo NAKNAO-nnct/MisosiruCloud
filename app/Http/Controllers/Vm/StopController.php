@@ -5,21 +5,19 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
-use App\Lib\Proxmox\ProxmoxApi;
-use App\Models\VmMeta;
+use App\Services\VmService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class StopController extends Controller
 {
-    public function __construct(private readonly ProxmoxApi $api)
+    public function __construct(private readonly VmService $vmService)
     {
     }
 
     public function __invoke(Request $request, int $vmid): RedirectResponse
     {
-        $meta = VmMeta::where('proxmox_vmid', $vmid)->firstOrFail();
-        $this->api->vm()->stopVm($meta->proxmox_node, $vmid);
+        $this->vmService->stopByVmid($vmid);
 
         return redirect()->route('vms.show', $vmid)->with('success', 'VMを停止しました。');
     }

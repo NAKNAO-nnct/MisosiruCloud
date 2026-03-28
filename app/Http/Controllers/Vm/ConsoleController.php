@@ -5,21 +5,20 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
-use App\Lib\Proxmox\ProxmoxApi;
-use App\Models\VmMeta;
+use App\Services\VmService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ConsoleController extends Controller
 {
-    public function __construct(private readonly ProxmoxApi $api)
+    public function __construct(private readonly VmService $vmService)
     {
     }
 
     public function __invoke(Request $request, int $vmid): View
     {
-        $meta = VmMeta::where('proxmox_vmid', $vmid)->with('tenant')->firstOrFail();
-        $vncProxy = $this->api->vm()->getVncProxy($meta->proxmox_node, $vmid);
+        $meta = $this->vmService->getVmWithMeta($vmid)['meta'];
+        $vncProxy = $this->vmService->getVncProxyByVmid($vmid);
 
         return view('vms.console', compact('meta', 'vncProxy'));
     }

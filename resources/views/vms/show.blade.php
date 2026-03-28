@@ -3,10 +3,10 @@
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <flux:heading size="xl">
-                    {{ $meta?->label ?? $status?->name ?? "VMID {$meta?->proxmox_vmid}" }}
+                    {{ $meta?->getLabel() ?? data_get($status, 'name') ?? "VMID {$meta?->getProxmoxVmid()}" }}
                 </flux:heading>
                 @if ($meta)
-                    <x-vm-status-badge :status="$meta->provisioning_status" />
+                    <x-vm-status-badge :status="$meta->getProvisioningStatus()" />
                 @endif
             </div>
             <flux:button href="{{ route('vms.index') }}" variant="ghost" size="sm">← 一覧へ</flux:button>
@@ -26,23 +26,23 @@
                     <dl class="space-y-2 text-sm">
                         <div class="flex justify-between">
                             <dt class="text-zinc-500">テナント</dt>
-                            <dd>{{ $meta->tenant?->name ?? '-' }}</dd>
+                            <dd>{{ $meta->getTenantName() ?? '-' }}</dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-zinc-500">ノード</dt>
-                            <dd>{{ $meta->proxmox_node }}</dd>
+                            <dd>{{ $meta->getProxmoxNode() }}</dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-zinc-500">VMID</dt>
-                            <dd>{{ $meta->proxmox_vmid }}</dd>
+                            <dd>{{ $meta->getProxmoxVmid() }}</dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-zinc-500">用途</dt>
-                            <dd>{{ $meta->purpose ?? '-' }}</dd>
+                            <dd>{{ $meta->getPurpose() ?? '-' }}</dd>
                         </div>
                         <div class="flex justify-between">
                             <dt class="text-zinc-500">IP アドレス</dt>
-                            <dd>{{ $meta->shared_ip_address ?? '-' }}</dd>
+                            <dd>{{ $meta->getSharedIpAddress() ?? '-' }}</dd>
                         </div>
                     </dl>
                 </flux:card>
@@ -56,7 +56,7 @@
                         <div>
                             <p class="mb-1 text-sm text-zinc-500">CPU</p>
                             <x-resource-meter
-                                :used="round($status->cpu * 100, 1)"
+                                :used="round((float) data_get($status, 'cpu', 0) * 100, 1)"
                                 :total="100"
                                 unit="%"
                             />
@@ -64,8 +64,8 @@
                         <div>
                             <p class="mb-1 text-sm text-zinc-500">メモリ</p>
                             <x-resource-meter
-                                :used="round($status->mem / 1024 / 1024)"
-                                :total="round($status->maxmem / 1024 / 1024)"
+                                :used="round((float) data_get($status, 'mem', 0) / 1024 / 1024)"
+                                :total="round((float) data_get($status, 'maxmem', 0) / 1024 / 1024)"
                                 unit="MB"
                             />
                         </div>
@@ -79,26 +79,26 @@
             <flux:heading size="lg" class="mb-4">操作</flux:heading>
             <div class="flex flex-wrap gap-2">
                 @if ($meta)
-                    <form method="POST" action="{{ route('vms.start', $meta->proxmox_vmid) }}">
+                    <form method="POST" action="{{ route('vms.start', $meta->getProxmoxVmid()) }}">
                         @csrf
                         <flux:button type="submit" variant="primary">起動</flux:button>
                     </form>
-                    <form method="POST" action="{{ route('vms.stop', $meta->proxmox_vmid) }}">
+                    <form method="POST" action="{{ route('vms.stop', $meta->getProxmoxVmid()) }}">
                         @csrf
                         <flux:button type="submit" variant="warning">停止</flux:button>
                     </form>
-                    <form method="POST" action="{{ route('vms.reboot', $meta->proxmox_vmid) }}">
+                    <form method="POST" action="{{ route('vms.reboot', $meta->getProxmoxVmid()) }}">
                         @csrf
                         <flux:button type="submit">再起動</flux:button>
                     </form>
-                    <flux:button href="{{ route('vms.console', $meta->proxmox_vmid) }}" variant="ghost">
+                    <flux:button href="{{ route('vms.console', $meta->getProxmoxVmid()) }}" variant="ghost">
                         コンソール
                     </flux:button>
-                    <form method="POST" action="{{ route('vms.force-stop', $meta->proxmox_vmid) }}">
+                    <form method="POST" action="{{ route('vms.force-stop', $meta->getProxmoxVmid()) }}">
                         @csrf
                         <flux:button type="submit" variant="danger">強制停止</flux:button>
                     </form>
-                    <form method="POST" action="{{ route('vms.destroy', $meta->proxmox_vmid) }}"
+                    <form method="POST" action="{{ route('vms.destroy', $meta->getProxmoxVmid()) }}"
                           onsubmit="return confirm('本当に削除しますか？この操作は取り消せません。')">
                         @csrf
                         @method('DELETE')
@@ -112,7 +112,7 @@
         @if ($meta)
             <flux:card>
                 <flux:heading size="lg" class="mb-4">スナップショット作成</flux:heading>
-                <form method="POST" action="{{ route('vms.snapshot', $meta->proxmox_vmid) }}" class="flex gap-2">
+                <form method="POST" action="{{ route('vms.snapshot', $meta->getProxmoxVmid()) }}" class="flex gap-2">
                     @csrf
                     <flux:input name="name" placeholder="snapshot-name" class="max-w-xs" />
                     <flux:button type="submit" variant="primary">作成</flux:button>
@@ -122,7 +122,7 @@
             {{-- ディスクリサイズ --}}
             <flux:card>
                 <flux:heading size="lg" class="mb-4">ディスクリサイズ</flux:heading>
-                <form method="POST" action="{{ route('vms.resize', $meta->proxmox_vmid) }}" class="flex gap-2">
+                <form method="POST" action="{{ route('vms.resize', $meta->getProxmoxVmid()) }}" class="flex gap-2">
                     @csrf
                     <flux:input name="disk" value="scsi0" class="max-w-32" />
                     <flux:input name="size" placeholder="+10G" class="max-w-32" />

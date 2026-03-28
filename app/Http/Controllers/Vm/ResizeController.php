@@ -6,21 +6,18 @@ namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Vm\ResizeVmRequest;
-use App\Lib\Proxmox\ProxmoxApi;
-use App\Models\VmMeta;
+use App\Services\VmService;
 use Illuminate\Http\RedirectResponse;
 
 class ResizeController extends Controller
 {
-    public function __construct(private readonly ProxmoxApi $api)
+    public function __construct(private readonly VmService $vmService)
     {
     }
 
     public function __invoke(ResizeVmRequest $request, int $vmid): RedirectResponse
     {
-        $meta = VmMeta::where('proxmox_vmid', $vmid)->firstOrFail();
-        $this->api->vm()->resizeVm(
-            $meta->proxmox_node,
+        $this->vmService->resizeByVmid(
             $vmid,
             $request->string('disk')->toString(),
             $request->string('size')->toString(),
