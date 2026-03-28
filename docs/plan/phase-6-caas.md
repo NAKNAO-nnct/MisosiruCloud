@@ -53,14 +53,14 @@ Controller/View/Route は未実装。
 
 ### 6-3. Form Request
 
-- [ ] `App\Http\Requests\Container\DeployContainerRequest`
+- [x] `App\Http\Requests\Container\DeployContainerRequest`
   - `tenant_id`, `name`, `image`, `replicas`, `cpu_mhz`, `memory_mb`, `domain`, `port_mappings`, `env_vars`
 
 ### 6-4. コントローラ
 
-- [ ] `Container\Index` — コンテナ一覧（Nomad ジョブ + `container_jobs`）
-- [ ] `Container\Create` — デプロイ画面
-- [ ] `Container\Store` — デプロイ処理
+- [x] `Container\Index` — コンテナ一覧（Nomad ジョブ + `container_jobs`）
+- [x] `Container\Create` — デプロイ画面
+- [x] `Container\Store` — デプロイ処理
 - [ ] `Container\Show` — コンテナ詳細（アロケーション状態、レプリカ数）
 - [ ] `Container\Restart` — 再起動
 - [ ] `Container\Scale` — レプリカスケール変更
@@ -70,19 +70,19 @@ Controller/View/Route は未実装。
 
 ### 6-5. View
 
-- [ ] `resources/views/containers/index.blade.php`（一覧・状態バッジ）
-- [ ] `resources/views/containers/deploy.blade.php`（デプロイフォーム）
+- [x] `resources/views/containers/index.blade.php`（一覧・状態バッジ）
+- [x] `resources/views/containers/deploy.blade.php`（デプロイフォーム）
 - [ ] `resources/views/containers/show.blade.php`（詳細・アロケーション・ログリンク）
 
 ### 6-6. ルーティング
 
-- [ ] コンテナ CRUD + アクションルートを `routes/web.php` に追加
+- [x] コンテナ CRUD + アクションルートを `routes/web.php` に追加（Index/Create/Store）
 
 ### 6-7. テスト
 
 - [x] Feature: コンテナデプロイ（Nomad API コールを Http::fake で確認）
 - [x] Feature: Traefik タグが domain 設定から正しく生成されること
-- [ ] Feature: コンテナスケール変更
+- [x] Feature: コンテナスケール変更
 - [ ] Feature: 他テナントのコンテナにアクセスできないこと
 - [x] Unit: `ContainerService` の Nomad Job Spec 生成ロジック
 - [ ] Unit: `DeployContainerRequest` の env_vars 暗号化保存

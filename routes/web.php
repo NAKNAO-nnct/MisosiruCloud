@@ -5,6 +5,9 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\DbaasStatusController as ApiDbaasStatus;
 use App\Http\Controllers\Api\NodeStatusController as ApiNodeStatus;
 use App\Http\Controllers\Api\VmStatusController as ApiVmStatus;
+use App\Http\Controllers\Container\CreateController as ContainerCreate;
+use App\Http\Controllers\Container\IndexController as ContainerIndex;
+use App\Http\Controllers\Container\StoreController as ContainerStore;
 use App\Http\Controllers\Dashboard\IndexController as DashboardIndex;
 use App\Http\Controllers\Dbaas\BackupController as DbaasBackup;
 use App\Http\Controllers\Dbaas\BackupsController as DbaasBackups;
@@ -104,6 +107,12 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::post('/{database}/restore', DbaasRestore::class)->name('restore');
             Route::get('/{database}/credentials', DbaasCredentials::class)->name('credentials');
             Route::post('/{database}/upgrade', DbaasUpgrade::class)->name('upgrade');
+        });
+
+        Route::prefix('containers')->name('containers.')->group(function (): void {
+            Route::get('/', ContainerIndex::class)->name('index');
+            Route::get('/deploy', ContainerCreate::class)->name('create');
+            Route::post('/', ContainerStore::class)->name('store');
         });
 
         Route::prefix('proxmox-clusters')->name('proxmox-clusters.')->group(function (): void {

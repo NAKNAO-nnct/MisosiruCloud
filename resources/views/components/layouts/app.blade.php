@@ -31,6 +31,9 @@
                         <flux:navlist.item icon="chevrons-up-down" :href="route('dbaas.index')" :current="request()->routeIs('dbaas.*')">
                             DBaaS管理
                         </flux:navlist.item>
+                        <flux:navlist.item icon="cube" :href="route('containers.index')" :current="request()->routeIs('containers.*')">
+                            CaaS管理
+                        </flux:navlist.item>
                         <flux:navlist.item icon="server" :href="route('proxmox-clusters.index')" :current="request()->routeIs('proxmox-clusters.*')">
                             Proxmox クラスタ
                         </flux:navlist.item>

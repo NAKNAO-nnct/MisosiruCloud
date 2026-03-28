@@ -16,7 +16,7 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 | テナント管理 | ✅ 完了 | CRUD + S3 認証情報管理 + テストあり |
 | VM 管理 | ✅ 完了 | CRUD/操作/内部API/View/テストあり |
 | DBaaS | ⚠️ ほぼ実装済み | Service/Controller/View/Route/スケジューラ実装済み。残りは一部テスト |
-| CaaS (Nomad 連携) | ⚠️ 部分実装 | `Lib\\Nomad` と `ContainerService` 実装済み、UI/API ルートは未実装 |
+| CaaS (Nomad 連携) | ⚠️ 部分実装 | `Lib\\Nomad` と `ContainerService` 実装済み、管理画面は Index/Create/Store まで実装 |
 | ネットワーク管理 | ❌ 未着手 | Network / VPS / DNS 管理機能未実装 |
 | VPS ゲートウェイ管理 | ❌ 未着手 | 未実装 |
 | 監視・可観測性 | ❌ 未着手 | Monitoring 機能未実装 |
@@ -62,7 +62,7 @@ Phase 9 ❌ (Phase 2 後いつでも可)
 | Phase 3 | ✅ 完了 | Tenant/S3 の Service/Controller/View/Request/Feature テスト実装 |
 | Phase 4 | ✅ 完了 | VM の Service/Controller/View/Internal API/Request/Unit+Feature テスト実装 |
 | Phase 5 | ⚠️ ほぼ実装済み | DBaaS UI/API/Route とバックアップスケジューラ実装済み。残りは Unit テスト中心 |
-| Phase 6 | ⚠️ 部分実装 | Nomad ライブラリと ContainerService 実装済み。画面/API ルートは未実装 |
+| Phase 6 | ⚠️ 部分実装 | Nomad ライブラリ・ContainerService・Deploy系画面/ルート実装済み。詳細操作系は未実装 |
 | Phase 7 | ❌ 未着手 | Network/VPS/DNS 管理未着手 |
 | Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
 | Phase 9 | ❌ 未着手 | Python Sidecar API と `Lib\\Snippet` 未着手 |
