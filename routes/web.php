@@ -27,6 +27,11 @@ use App\Http\Controllers\Dbaas\StartController as DbaasStart;
 use App\Http\Controllers\Dbaas\StopController as DbaasStop;
 use App\Http\Controllers\Dbaas\StoreController as DbaasStore;
 use App\Http\Controllers\Dbaas\UpgradeController as DbaasUpgrade;
+use App\Http\Controllers\Network\CreateController as NetworkCreate;
+use App\Http\Controllers\Network\DestroyController as NetworkDestroy;
+use App\Http\Controllers\Network\IndexController as NetworkIndex;
+use App\Http\Controllers\Network\ShowController as NetworkShow;
+use App\Http\Controllers\Network\StoreController as NetworkStore;
 use App\Http\Controllers\ProxmoxNode\ActivateController as ProxmoxNodeActivate;
 use App\Http\Controllers\ProxmoxNode\CreateController as ProxmoxNodeCreate;
 use App\Http\Controllers\ProxmoxNode\DeactivateController as ProxmoxNodeDeactivate;
@@ -150,6 +155,14 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::put('/{vpsGateway}', VpsGatewayUpdate::class)->name('update');
             Route::delete('/{vpsGateway}', VpsGatewayDestroy::class)->name('destroy');
             Route::post('/{vpsGateway}/sync', VpsGatewaySync::class)->name('sync');
+        });
+
+        Route::prefix('networks')->name('networks.')->group(function (): void {
+            Route::get('/', NetworkIndex::class)->name('index');
+            Route::get('/create', NetworkCreate::class)->name('create');
+            Route::post('/', NetworkStore::class)->name('store');
+            Route::get('/{tenant}', NetworkShow::class)->name('show');
+            Route::delete('/{tenant}', NetworkDestroy::class)->name('destroy');
         });
     });
 

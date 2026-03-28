@@ -68,6 +68,18 @@ class VmMetaRepository
     }
 
     /**
+     * @return Collection<int, VmMetaData>
+     */
+    public function findByTenantId(int $tenantId): Collection
+    {
+        return VmMeta::query()
+            ->where('tenant_id', $tenantId)
+            ->orderBy('proxmox_vmid')
+            ->get()
+            ->map(fn (VmMeta $vm) => VmMetaData::of($vm));
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     public function create(array $data): VmMetaData
