@@ -9,7 +9,7 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 
 ## 現在の判定
 
-❌ 未着手
+⚠️ 部分実装（Data クラス・Repository・Controller/Service 統合は大部分が完了。Queue/非同期ジョブは未着手）
 
 ---
 
@@ -27,56 +27,63 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 
 > `app/Data/` 配下に配置。`final readonly class` + private constructor + `of`/`make` ファクトリメソッド。
 
-- [ ] `App\Data\Tenant\TenantData` — Tenant エンティティ
-- [ ] `App\Data\Vm\VmMetaData` — VmMeta エンティティ
+- [x] `App\Data\Tenant\TenantData` — Tenant エンティティ ✅ 実装済み
+- [x] `App\Data\Vm\VmMetaData` — VmMeta エンティティ ✅ 実装済み
 - [ ] `App\Data\Vm\VmDetailResponseData` — VM + Proxmox 状態を合成する ResponseData
 - [ ] `App\Data\Vm\ProvisionVmCommand` — 非同期ジョブ用 CommandData
-- [ ] `App\Data\Dbaas\DatabaseInstanceData` — DatabaseInstance エンティティ
+- [x] `App\Data\Dbaas\DatabaseInstanceData` — DatabaseInstance エンティティ ✅ 実装済み
+- [x] `App\Data\Dbaas\BackupScheduleData` — BackupSchedule エンティティ ✅ 実装済み（計画外で追加実装）
 - [ ] `App\Data\Dbaas\DbaasDetailResponseData` — DBaaS 詳細 ResponseData
 - [ ] `App\Data\Dbaas\ProvisionDbaasCommand` — 非同期ジョブ用 CommandData
-- [ ] `App\Data\Container\ContainerJobData` — ContainerJob エンティティ
+- [x] `App\Data\Container\ContainerJobData` — ContainerJob エンティティ ✅ 実装済み
 - [ ] `App\Data\Container\DeployContainerCommand` — 非同期ジョブ用 CommandData
 - [ ] `App\Data\Network\NetworkData` — Network エンティティ
-- [ ] `App\Data\S3\S3CredentialData` — S3Credential エンティティ
-- [ ] `App\Data\User\UserData` — User エンティティ
+- [x] `App\Data\S3\S3CredentialData` — S3Credential エンティティ ✅ 実装済み
+- [x] `App\Data\User\AuthUserData` — User エンティティ ✅ 実装済み（`UserData` ではなく `AuthUserData` として実装）
+- [x] `App\Data\VpsGateway\VpsGatewayData` — VpsGateway エンティティ ✅ 実装済み（計画外で追加実装、ただし `toArray()` 未実装）
+- [x] `App\Data\ProxmoxNode\ProxmoxNodeData` — ProxmoxNode エンティティ ✅ 実装済み（計画外で追加実装、ただし `make()` / `toArray()` 未実装）
 
 ### 11-2. Data クラス設計規約の適用
 
-- [ ] 全 Data クラスが以下の規約に準拠すること
-  - `final readonly class`
-  - `private function __construct()`
-  - `static of(Model $model): self` — Eloquent Model からの変換
-  - `static make(array $attributes): self` — 配列からの変換
-  - `getXxx(): Type` — getter メソッド経由でのプロパティアクセス
-  - `toArray(): array` — 連想配列変換
+- [x] 実装済み Data クラスの大部分が規約に準拠 ✅
+  - `final readonly class` ✅
+  - `private function __construct()` ✅
+  - `static of(Model $model): self` ✅
+  - `static make(array $attributes): self` ✅（ProxmoxNodeData を除く）
+  - `getXxx(): Type` getter ✅
+  - `toArray(): array` ✅（VpsGatewayData, ProxmoxNodeData を除く）
+- [ ] `VpsGatewayData` に `toArray()` メソッドを追加
+- [ ] `ProxmoxNodeData` に `make()` / `toArray()` メソッドを追加（暗号化フィールドの扱いを要検討）
 
 ### 11-3. Repository クラス
 
 > `app/Repositories/` 配下に配置。Eloquent Model はこの層内部でのみ使用。
 
-- [ ] `App\Repositories\TenantRepository`
-- [ ] `App\Repositories\VmMetaRepository`
-  - `nextVmId(): int` — VMID 採番ロジック含む
-- [ ] `App\Repositories\DatabaseInstanceRepository`
-- [ ] `App\Repositories\ContainerJobRepository`
-- [ ] `App\Repositories\BackupScheduleRepository`
-- [ ] `App\Repositories\S3CredentialRepository`
-- [ ] `App\Repositories\UserRepository`
-- [ ] `App\Repositories\ProxmoxNodeRepository`
+- [x] `App\Repositories\TenantRepository` ✅ 実装済み（findById, paginate, all, create, update）
+- [x] `App\Repositories\VmMetaRepository` ✅ 実装済み（findByVmid, allWithTenant, countByTenantId 等 11 メソッド）
+- [x] `App\Repositories\DatabaseInstanceRepository` ✅ 実装済み（paginate, countByTenantId 等）
+- [x] `App\Repositories\ContainerJobRepository` ✅ 実装済み（paginate, create, update, delete）
+- [x] `App\Repositories\BackupScheduleRepository` ✅ 実装済み（findByDatabaseInstanceId, allEnabled 等）
+- [x] `App\Repositories\S3CredentialRepository` ✅ 実装済み（findActiveByTenantId, paginateByTenantId 等）
+- [ ] `App\Repositories\UserRepository` — 未実装
+- [x] `App\Repositories\ProxmoxNodeRepository` ✅ 実装済み（activate/deactivate, DB::transaction 使用）
+- [x] `App\Repositories\VpsGatewayRepository` ✅ 実装済み（計画外で追加実装、nextSequence 含む）
 
 ### 11-4. Repository 設計規約の適用
 
-- [ ] 全 Repository が以下の規約に準拠すること
-  - 引数・返り値は Data クラス（Eloquent Model を外部に露出しない）
-  - `Model::query()` 経由でクエリ（`DB::` ファサード不使用）
-  - リレーション取得は eager load（N+1 問題防止）
+- [x] 全 Repository が規約に概ね準拠 ✅
+  - 引数・返り値は Data クラス ✅
+  - `Model::query()` 経由でクエリ ✅（ProxmoxNodeRepository の activate/deactivate のみ `DB::transaction` 使用）
+  - リレーション取得は eager load ✅
 
 ### 11-5. 既存 Controller / Service のリファクタリング
 
-- [ ] Controller が Eloquent Model を直接参照しないよう修正
-- [ ] Service が Repository 経由でデータアクセスするよう修正
-- [ ] View に渡すデータを Data クラスに統一（`$tenant->getName()` 形式）
-- [ ] FormRequest → `EntityData::make($request->validated())` パターンの適用
+- [x] Controller が Repository を inject し、Data クラス経由でデータ操作 ✅ 実装済み
+  - Dashboard, Vm(6), Dbaas(8), Container(7), VpsGateway(6), Network(4), S3Credential 等の全 Controller が Repository 使用
+- [x] Service が Repository 経由でデータアクセス ✅ 実装済み
+  - VmService, DbaasService, ContainerService, S3CredentialService, BackupService, TenantService, VpsGatewayService が統合済み
+- [x] View に渡すデータを Data クラスに統一 ✅ 実装済み
+- [ ] NetworkService が生の配列を返す箇所 → NetworkData に統一する（NetworkData 作成後）
 
 ### 11-6. 非同期ジョブクラス
 

@@ -78,7 +78,7 @@ Phase 15 ❌ (Phase 7 後、Transit VM 構築)
 | Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
 | Phase 9 | ✅ 完了 | Python Sidecar API、`Lib\\Snippet`、`VmService` 連携、ローカル compose、Unit/Feature/Python テスト実装済み |
 | Phase 10 | ❌ 未着手 | Go S3 プロキシサーバ・`Lib\\S3Proxy\\CredentialManager` 未着手 |
-| Phase 11 | ❌ 未着手 | Data/Repository レイヤー・非同期ジョブ (ProvisionVmJob 等)・Queue 設定 未着手 |
+| Phase 11 | ⚠️ 部分実装 | Data クラス 9/15 実装済み・Repository 8/9 実装済み・Controller/Service 統合済み。Queue/非同期ジョブは未着手 |
 | Phase 12 | ❌ 未着手 | Admin\\User CRUD・Nomad Allocation/Node/Quota・Snippet API 仕様修正 未着手 |
 | Phase 13 | ❌ 未着手 | compose.prod.yaml・CoreDNS・Harbor・Let's Encrypt 証明書 未着手 |
 | Phase 14 | ❌ 未着手 | Packer テンプレート (base-ubuntu/dbaas-*/nomad-worker) 未着手 |
