@@ -5,11 +5,11 @@
 テナントネットワーク（Proxmox SDN VNet）の可視化・管理と、  
 外部 VPS ゲートウェイ（WireGuard VPN）の登録・状態管理を実装する。
 
-## 現在の判定（2026-03-28）
+## 現在の判定（2026-03-29）
 
-❌ 未着手
+✅ 実装済み
 
-Network/VPS/DNS 管理機能（Service/Controller/View/Route/Test）は未実装。
+Network/VPS/DNS 管理機能（Service/Controller/View/Route/Test）は実装済み。
 
 ---
 
@@ -17,7 +17,7 @@ Network/VPS/DNS 管理機能（Service/Controller/View/Route/Test）は未実装
 
 ### 7-1. VpsGatewayService
 
-- [ ] `App\Services\VpsGatewayService` 作成
+- [x] `App\Services\VpsGatewayService` 作成
   - `register(array $params): VpsGateway`
     - `wireguard_ip` を `10.255.{id}.1` で自動採番
     - `transit_wireguard_port` を `51820 + N` で自動採番
@@ -28,59 +28,59 @@ Network/VPS/DNS 管理機能（Service/Controller/View/Route/Test）は未実装
 
 ### 7-2. ネットワーク管理コントローラ
 
-- [ ] `Network\Index` — テナントネットワーク一覧（Proxmox SDN VNet と DB を突合）
-- [ ] `Network\Create` — ネットワーク作成画面
-- [ ] `Network\Store` — ネットワーク作成（Proxmox SDN API 経由）
-- [ ] `Network\Show` — ネットワーク詳細（VNet 情報、接続 VM 一覧）
-- [ ] `Network\Destroy` — ネットワーク削除（SDN VNet 削除）
+- [x] `Network\Index` — テナントネットワーク一覧（Proxmox SDN VNet と DB を突合）
+- [x] `Network\Create` — ネットワーク作成画面
+- [x] `Network\Store` — ネットワーク作成（Proxmox SDN API 経由）
+- [x] `Network\Show` — ネットワーク詳細（VNet 情報、接続 VM 一覧）
+- [x] `Network\Destroy` — ネットワーク削除（SDN VNet 削除）
 
 ### 7-3. VPS ゲートウェイ管理コントローラ（admin のみ）
 
-- [ ] `Admin\Vps\Index` — VPS ゲートウェイ一覧
-- [ ] `Admin\Vps\Store` — VPS 登録（WireGuard conf 生成・表示）
-- [ ] `Admin\Vps\Show` — VPS 詳細（接続状態・設定確認）
-- [ ] `Admin\Vps\Update` — VPS 設定更新
-- [ ] `Admin\Vps\Destroy` — VPS 登録削除
-- [ ] `Admin\Vps\Sync` — VPS 接続状態同期
+- [x] `Admin\Vps\Index` — VPS ゲートウェイ一覧
+- [x] `Admin\Vps\Store` — VPS 登録（WireGuard conf 生成・表示）
+- [x] `Admin\Vps\Show` — VPS 詳細（接続状態・設定確認）
+- [x] `Admin\Vps\Update` — VPS 設定更新
+- [x] `Admin\Vps\Destroy` — VPS 登録削除
+- [x] `Admin\Vps\Sync` — VPS 接続状態同期
 
 ### 7-4. Proxmox ノード管理コントローラ（admin のみ）
 
-- [ ] `Admin\Node\Index` — Proxmox ノード一覧（API 接続状態バッジ付き）
-- [ ] `Admin\Node\Store` — ノード登録（API トークン暗号化保存）
-- [ ] `Admin\Node\Update` — ノード設定更新
+- [x] `Admin\Node\Index` — Proxmox ノード一覧（API 接続状態バッジ付き）
+- [x] `Admin\Node\Store` — ノード登録（API トークン暗号化保存）
+- [x] `Admin\Node\Update` — ノード設定更新
 
 ### 7-5. DNS 管理コントローラ（admin のみ）
 
 > DNS レコード操作は外部 DNS プロバイダ API 経由（さくらのクラウド DNS 等）
 
-- [ ] `Admin\Dns\Index` — DNS レコード一覧（外部 API から取得）
-- [ ] `Admin\Dns\Store` — レコード追加
-- [ ] `Admin\Dns\Update` — レコード更新
-- [ ] `Admin\Dns\Destroy` — レコード削除
-- [ ] DNS プロバイダ呼び出しを抽象化するインタフェース `App\Lib\Dns\DnsProviderInterface`
-- [ ] 初期実装：`App\Lib\Dns\SakuraDnsProvider`（さくらのクラウド DNS API）
+- [x] `Admin\Dns\Index` — DNS レコード一覧（外部 API から取得）
+- [x] `Admin\Dns\Store` — レコード追加
+- [x] `Admin\Dns\Update` — レコード更新
+- [x] `Admin\Dns\Destroy` — レコード削除
+- [x] DNS プロバイダ呼び出しを抽象化するインタフェース `App\Lib\Dns\DnsProviderInterface`
+- [x] 初期実装：`App\Lib\Dns\SakuraDnsProvider`（さくらのクラウド DNS API）
 
 ### 7-6. View
 
-- [ ] `resources/views/networks/index.blade.php`
-- [ ] `resources/views/networks/show.blade.php`
-- [ ] `resources/views/admin/vps/index.blade.php`（接続状態バッジ）
-- [ ] `resources/views/admin/vps/show.blade.php`（WireGuard conf 表示 + コピーボタン）
-- [ ] `resources/views/admin/nodes/index.blade.php`
-- [ ] `resources/views/admin/dns/index.blade.php`
+- [x] `resources/views/networks/index.blade.php`
+- [x] `resources/views/networks/show.blade.php`
+- [x] `resources/views/admin/vps/index.blade.php`（接続状態バッジ）
+- [x] `resources/views/admin/vps/show.blade.php`（WireGuard conf 表示 + コピーボタン）
+- [x] `resources/views/admin/nodes/index.blade.php`
+- [x] `resources/views/admin/dns/index.blade.php`
 
 ### 7-7. ルーティング
 
-- [ ] ネットワークルートを `routes/web.php` に追加
-- [ ] VPS・ノード・DNS 管理ルートを追加（`admin` ミドルウェア）
+- [x] ネットワークルートを `routes/web.php` に追加
+- [x] VPS・ノード・DNS 管理ルートを追加（`admin` ミドルウェア）
 
 ### 7-8. テスト
 
-- [ ] Feature: VPS 登録時に `wireguard_ip` と `transit_wireguard_port` が一意に採番されること
-- [ ] Feature: WireGuard conf が正しいフォーマットで生成されること
-- [ ] Feature: Proxmox ノード登録時に API トークンが暗号化されて保存されること
-- [ ] Feature: admin 以外は VPS/ノード管理にアクセスできないこと
-- [ ] Unit: `VpsGatewayService::generateWireguardConfig()` の出力フォーマット
+- [x] Feature: VPS 登録時に `wireguard_ip` と `transit_wireguard_port` が一意に採番されること
+- [x] Feature: WireGuard conf が正しいフォーマットで生成されること
+- [x] Feature: Proxmox ノード登録時に API トークンが暗号化されて保存されること
+- [x] Feature: admin 以外は VPS/ノード管理にアクセスできないこと
+- [x] Unit: `VpsGatewayService::generateWireguardConfig()` の出力フォーマット
 
 ---
 

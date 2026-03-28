@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Data\User\AuthUserData;
+use App\Lib\Dns\DnsProviderInterface;
+use App\Lib\Dns\SakuraDnsProvider;
 use App\Lib\Nomad\Client as NomadClient;
 use App\Lib\Nomad\NomadApi;
 use App\Lib\Proxmox\Client as ProxmoxClient;
@@ -25,6 +27,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(DnsProviderInterface::class, fn (): DnsProviderInterface => new SakuraDnsProvider(
+            baseUrl: (string) config('services.dns.sakura.base_url', ''),
+            apiToken: (string) config('services.dns.sakura.api_token', ''),
+            zone: (string) config('services.dns.sakura.zone', ''),
+        ));
+
         $this->app->singleton(NomadApi::class, function (): ?NomadApi {
             $address = (string) config('services.nomad.address', '');
             $token = (string) config('services.nomad.token', '');

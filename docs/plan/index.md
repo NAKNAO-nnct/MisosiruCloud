@@ -5,7 +5,7 @@
 Proxmox VE 3ノードクラスタ上のマルチテナント型クラウド管理パネル。  
 Laravel + Livewire + Flux UI によるサーバサイドレンダリングベース。外部公開 API なし。
 
-## 現在の実装状況（2026-03-28 反映）
+## 現在の実装状況（2026-03-29 反映）
 
 | 領域 | 状態 | 備考 |
 |------|------|------|
@@ -17,8 +17,8 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 | VM 管理 | ✅ 完了 | CRUD/操作/内部API/View/テストあり |
 | DBaaS | ⚠️ ほぼ実装済み | Service/Controller/View/Route/スケジューラ実装済み。残りは一部テスト |
 | CaaS (Nomad 連携) | ⚠️ 部分実装 | `Lib\\Nomad` と `ContainerService` 実装済み、管理画面は Index/Create/Store まで実装 |
-| ネットワーク管理 | ❌ 未着手 | Network / VPS / DNS 管理機能未実装 |
-| VPS ゲートウェイ管理 | ❌ 未着手 | 未実装 |
+| ネットワーク管理 | ✅ 完了 | Network 一覧/作成/詳細/削除、Proxmox SDN 連携、テスト実装済み |
+| VPS ゲートウェイ管理 | ✅ 完了 | VPS 登録/詳細/更新/削除/同期、WireGuard conf 生成、テスト実装済み |
 | 監視・可観測性 | ❌ 未着手 | Monitoring 機能未実装 |
 | スニペットサイドカーAPI | ❌ 未着手 | `snippet-api/` 未作成 |
 
@@ -46,14 +46,14 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅ → Phase 4 ✅ → Phase 5 ⚠️
                                            ↓
                                         Phase 6 ❌
-                               Phase 7 ❌ ────┘
+                               Phase 7 ✅ ────┘
 Phase 8 ❌ (Phase 1 後いつでも可)
 Phase 9 ❌ (Phase 2 後いつでも可)
 ```
 
 ---
 
-## フェーズ別進捗サマリ（2026-03-28）
+## フェーズ別進捗サマリ（2026-03-29）
 
 | フェーズ | 判定 | 実装状況（要約） |
 |---------|------|------------------|
@@ -63,7 +63,7 @@ Phase 9 ❌ (Phase 2 後いつでも可)
 | Phase 4 | ✅ 完了 | VM の Service/Controller/View/Internal API/Request/Unit+Feature テスト実装 |
 | Phase 5 | ⚠️ ほぼ実装済み | DBaaS UI/API/Route とバックアップスケジューラ実装済み。残りは Unit テスト中心 |
 | Phase 6 | ⚠️ 部分実装 | Nomad ライブラリ・ContainerService・Deploy系画面/ルート実装済み。詳細操作系は未実装 |
-| Phase 7 | ❌ 未着手 | Network/VPS/DNS 管理未着手 |
+| Phase 7 | ✅ 完了 | Network/VPS/DNS 管理（Service/Controller/View/Route/Test）実装済み |
 | Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
 | Phase 9 | ❌ 未着手 | Python Sidecar API と `Lib\\Snippet` 未着手 |
 

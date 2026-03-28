@@ -46,4 +46,12 @@ return [
         'datacenter' => env('NOMAD_DATACENTER', 'dc1'),
     ],
 
+    'dns' => [
+        'sakura' => [
+            'base_url' => env('SAKURA_DNS_BASE_URL', 'https://secure.sakura.ad.jp/cloud/zone/v1'),
+            'api_token' => env('SAKURA_DNS_API_TOKEN'),
+            'zone' => env('SAKURA_DNS_ZONE'),
+        ],
+    ],
+
 ];

@@ -43,6 +43,9 @@
                         <flux:navlist.item icon="server" :href="route('vps-gateways.index')" :current="request()->routeIs('vps-gateways.*')">
                             VPS ゲートウェイ
                         </flux:navlist.item>
+                        <flux:navlist.item icon="globe-alt" :href="route('dns.index')" :current="request()->routeIs('dns.*')">
+                            DNS 管理
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endif
             </flux:navlist>

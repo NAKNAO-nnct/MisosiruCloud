@@ -27,6 +27,10 @@ use App\Http\Controllers\Dbaas\StartController as DbaasStart;
 use App\Http\Controllers\Dbaas\StopController as DbaasStop;
 use App\Http\Controllers\Dbaas\StoreController as DbaasStore;
 use App\Http\Controllers\Dbaas\UpgradeController as DbaasUpgrade;
+use App\Http\Controllers\Dns\DestroyController as DnsDestroy;
+use App\Http\Controllers\Dns\IndexController as DnsIndex;
+use App\Http\Controllers\Dns\StoreController as DnsStore;
+use App\Http\Controllers\Dns\UpdateController as DnsUpdate;
 use App\Http\Controllers\Network\CreateController as NetworkCreate;
 use App\Http\Controllers\Network\DestroyController as NetworkDestroy;
 use App\Http\Controllers\Network\IndexController as NetworkIndex;
@@ -163,6 +167,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::post('/', NetworkStore::class)->name('store');
             Route::get('/{tenant}', NetworkShow::class)->name('show');
             Route::delete('/{tenant}', NetworkDestroy::class)->name('destroy');
+        });
+
+        Route::prefix('dns')->name('dns.')->group(function (): void {
+            Route::get('/', DnsIndex::class)->name('index');
+            Route::post('/', DnsStore::class)->name('store');
+            Route::put('/{recordId}', DnsUpdate::class)->name('update');
+            Route::delete('/{recordId}', DnsDestroy::class)->name('destroy');
         });
     });
 
