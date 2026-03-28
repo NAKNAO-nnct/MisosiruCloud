@@ -31,9 +31,11 @@ class S3CredentialService
         string $prefix,
         string $description,
     ): S3CredentialData {
+        $secretKey = $this->generateSecretKey();
+
         return $this->s3CredentialRepository->create($tenant->getId(), [
             'access_key' => $this->generateAccessKey(),
-            'secret_key_encrypted' => $this->generateSecretKey(),
+            'secret_key_plain' => $secretKey,
             'allowed_bucket' => $bucket,
             'allowed_prefix' => $prefix,
             'description' => $description,
@@ -43,9 +45,11 @@ class S3CredentialService
 
     public function rotate(S3CredentialData $credential): S3CredentialData
     {
+        $secretKey = $this->generateSecretKey();
+
         return $this->s3CredentialRepository->update($credential->getId(), [
             'access_key' => $this->generateAccessKey(),
-            'secret_key_encrypted' => $this->generateSecretKey(),
+            'secret_key_plain' => $secretKey,
         ]);
     }
 

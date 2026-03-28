@@ -49,10 +49,10 @@
             </flux:field>
 
             <div class="flex gap-2">
-                <flux:button 
-                    type="button" 
+                <flux:button
+                    type="button"
                     onclick="document.getElementById('test-api-form').submit()"
-                    variant="ghost" 
+                    variant="ghost"
                     size="sm"
                 >
                     テスト

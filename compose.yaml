@@ -50,3 +50,44 @@ services:
       - ${COMPOSE_SNIPPET_API_PORT:-18080}:8080
     volumes:
       - ./snippet-api/data/snippets:${SNIPPET_PATH:-/data/snippets}
+
+  s3-proxy:
+    build:
+      context: ./s3-proxy
+      dockerfile: Dockerfile
+    environment:
+      S3_BACKEND_ENDPOINT: ${S3_BACKEND_ENDPOINT:-http://minio:9000}
+      S3_BACKEND_REGION: ${S3_BACKEND_REGION:-us-east-1}
+      S3_BACKEND_ACCESS_KEY: ${S3_BACKEND_ACCESS_KEY:-minioadmin}
+      S3_BACKEND_SECRET_KEY: ${S3_BACKEND_SECRET_KEY:-minioadmin}
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: docker
+      DB_PASSWORD: docker
+      DB_NAME: database
+      LISTEN_ADDR: 0.0.0.0
+      LISTEN_PORT: 9000
+      CACHE_REFRESH_INTERVAL: 10s
+      LOG_LEVEL: info
+    ports:
+      - ${COMPOSE_S3_PROXY_PORT:-9000}:9000
+    depends_on:
+      - db
+      - minio
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    ports:
+      - ${COMPOSE_MINIO_API_PORT:-9100}:9000
+      - ${COMPOSE_MINIO_CONSOLE_PORT:-9001}:9001
+    volumes:
+      - ./docker/minio/data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

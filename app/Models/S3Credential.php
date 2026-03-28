@@ -10,8 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'tenant_id', 'access_key', 'secret_key_encrypted',
-    'allowed_bucket', 'allowed_prefix', 'description', 'is_active', 'last_used_at',
+    'tenant_id', 'access_key', 'secret_key_plain',
+    'allowed_bucket', 'allowed_prefix', 'description', 'is_active', 'last_used_at', 'name',
 ])]
 class S3Credential extends Model
 {
@@ -20,7 +20,6 @@ class S3Credential extends Model
     protected function casts(): array
     {
         return [
-            'secret_key_encrypted' => 'encrypted',
             'is_active' => 'boolean',
             'last_used_at' => 'datetime',
         ];

@@ -32,7 +32,7 @@ final readonly class S3CredentialData
             id: $model->id,
             tenantId: (int) $model->tenant_id,
             accessKey: $model->access_key,
-            secretKey: $model->secret_key_encrypted,
+            secretKey: $model->secret_key_plain ?? '',
             allowedBucket: $model->allowed_bucket,
             allowedPrefix: $model->allowed_prefix,
             description: $model->description ?? '',
@@ -55,7 +55,7 @@ final readonly class S3CredentialData
             id: (int) ($attributes['id'] ?? 0),
             tenantId: (int) ($attributes['tenant_id'] ?? 0),
             accessKey: (string) ($attributes['access_key'] ?? ''),
-            secretKey: (string) ($attributes['secret_key'] ?? $attributes['secret_key_encrypted'] ?? ''),
+            secretKey: (string) ($attributes['secret_key'] ?? $attributes['secret_key_plain'] ?? ''),
             allowedBucket: (string) ($attributes['allowed_bucket'] ?? ''),
             allowedPrefix: (string) ($attributes['allowed_prefix'] ?? ''),
             description: (string) ($attributes['description'] ?? ''),
@@ -122,7 +122,7 @@ final readonly class S3CredentialData
     {
         return [
             'access_key' => $this->accessKey,
-            'secret_key_encrypted' => $this->secretKey,
+            'secret_key_plain' => $this->secretKey,
             'allowed_bucket' => $this->allowedBucket,
             'allowed_prefix' => $this->allowedPrefix,
             'description' => $this->description,
