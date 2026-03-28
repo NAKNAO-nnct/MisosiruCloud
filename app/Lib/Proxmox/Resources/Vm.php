@@ -10,7 +10,9 @@ use App\Lib\Proxmox\DataObjects\VmStatus;
 
 class Vm
 {
-    public function __construct(private readonly Client $client) {}
+    public function __construct(private readonly Client $client)
+    {
+    }
 
     public function listVms(string $node): array
     {

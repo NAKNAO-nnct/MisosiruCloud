@@ -23,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ProxmoxApi::class, function (): ?ProxmoxApi {
             $node = ProxmoxNode::where('is_active', true)->first();
 
-            if (! $node) {
+            if (!$node) {
                 return null;
             }
 
@@ -31,7 +31,7 @@ class AppServiceProvider extends ServiceProvider
                 hostname: $node->hostname,
                 tokenId: $node->api_token_id,
                 tokenSecret: $node->api_token_secret_encrypted,
-                verifyTls: ! app()->isLocal(),
+                verifyTls: !app()->isLocal(),
             );
 
             return new ProxmoxApi($client);

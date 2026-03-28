@@ -6,4 +6,6 @@ namespace App\Lib\Proxmox\Exceptions;
 
 use RuntimeException;
 
-class ProxmoxApiException extends RuntimeException {}
+class ProxmoxApiException extends RuntimeException
+{
+}

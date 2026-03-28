@@ -13,7 +13,8 @@ readonly class VmConfig
         public int $memory,
         public array $disks,
         public array $nets,
-    ) {}
+    ) {
+    }
 
     public static function from(array $data): self
     {

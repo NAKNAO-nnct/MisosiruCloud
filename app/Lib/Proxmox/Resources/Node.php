@@ -9,7 +9,9 @@ use App\Lib\Proxmox\DataObjects\NodeStatus;
 
 class Node
 {
-    public function __construct(private readonly Client $client) {}
+    public function __construct(private readonly Client $client)
+    {
+    }
 
     public function listNodes(): array
     {

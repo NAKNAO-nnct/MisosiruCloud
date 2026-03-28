@@ -8,7 +8,9 @@ use App\Lib\Proxmox\Client;
 
 class Storage
 {
-    public function __construct(private readonly Client $client) {}
+    public function __construct(private readonly Client $client)
+    {
+    }
 
     public function listStorage(string $node): array
     {

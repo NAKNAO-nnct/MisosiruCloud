@@ -14,7 +14,8 @@ readonly class VmStatus
         public int $maxmem,
         public int $uptime,
         public ?int $pid,
-    ) {}
+    ) {
+    }
 
     public static function from(array $data): self
     {

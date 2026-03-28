@@ -56,7 +56,7 @@ class Client
             'Authorization' => "PVEAPIToken={$this->tokenId}={$this->tokenSecret}",
         ]);
 
-        if (! $this->verifyTls) {
+        if (!$this->verifyTls) {
             $http = $http->withoutVerifying();
         }
 
@@ -65,23 +65,17 @@ class Client
 
     private function url(string $path): string
     {
-        return $this->baseUrl.'/'.ltrim($path, '/');
+        return $this->baseUrl . '/' . ltrim($path, '/');
     }
 
     private function handleResponse(Response $response): array
     {
         if ($response->status() === 401 || $response->status() === 403) {
-            throw new ProxmoxAuthException(
-                "Proxmox authentication failed: {$response->status()}",
-                $response->status(),
-            );
+            throw new ProxmoxAuthException("Proxmox authentication failed: {$response->status()}", $response->status());
         }
 
         if ($response->failed()) {
-            throw new ProxmoxApiException(
-                "Proxmox API error: {$response->status()} - {$response->body()}",
-                $response->status(),
-            );
+            throw new ProxmoxApiException("Proxmox API error: {$response->status()} - {$response->body()}", $response->status());
         }
 
         return $response->json('data') ?? [];

@@ -8,7 +8,9 @@ use App\Lib\Proxmox\Client;
 
 class Cluster
 {
-    public function __construct(private readonly Client $client) {}
+    public function __construct(private readonly Client $client)
+    {
+    }
 
     public function getClusterStatus(): array
     {

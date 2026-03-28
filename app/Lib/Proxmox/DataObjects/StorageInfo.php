@@ -12,7 +12,8 @@ readonly class StorageInfo
         public int $avail,
         public int $total,
         public int $used,
-    ) {}
+    ) {
+    }
 
     public static function from(array $data): self
     {

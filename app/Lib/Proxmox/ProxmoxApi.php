@@ -12,7 +12,9 @@ use App\Lib\Proxmox\Resources\Vm;
 
 class ProxmoxApi
 {
-    public function __construct(private readonly Client $client) {}
+    public function __construct(private readonly Client $client)
+    {
+    }
 
     public function cluster(): Cluster
     {

@@ -14,7 +14,8 @@ readonly class NodeStatus
         public int $maxmem,
         public int $disk,
         public int $maxdisk,
-    ) {}
+    ) {
+    }
 
     public static function from(array $data): self
     {
