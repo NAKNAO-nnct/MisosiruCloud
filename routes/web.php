@@ -43,6 +43,7 @@ use App\Http\Controllers\ProxmoxNode\DestroyController as ProxmoxNodeDestroy;
 use App\Http\Controllers\ProxmoxNode\EditController as ProxmoxNodeEdit;
 use App\Http\Controllers\ProxmoxNode\IndexController as ProxmoxNodeIndex;
 use App\Http\Controllers\ProxmoxNode\StoreController as ProxmoxNodeStore;
+use App\Http\Controllers\ProxmoxNode\TestSnippetApiController as ProxmoxNodeTestSnippetApi;
 use App\Http\Controllers\ProxmoxNode\UpdateController as ProxmoxNodeUpdate;
 use App\Http\Controllers\S3Credential\DestroyController as S3CredentialDestroy;
 use App\Http\Controllers\S3Credential\IndexController as S3CredentialIndex;
@@ -150,6 +151,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::delete('/{proxmoxNode}', ProxmoxNodeDestroy::class)->name('destroy');
             Route::post('/{proxmoxNode}/activate', ProxmoxNodeActivate::class)->name('activate');
             Route::post('/{proxmoxNode}/deactivate', ProxmoxNodeDeactivate::class)->name('deactivate');
+            Route::post('/{proxmoxNode}/test-snippet-api', ProxmoxNodeTestSnippetApi::class)->name('test-snippet-api');
         });
 
         Route::prefix('vps-gateways')->name('vps-gateways.')->group(function (): void {

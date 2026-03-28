@@ -49,9 +49,36 @@
             </flux:field>
 
             <div class="flex gap-2">
+                <flux:button 
+                    type="button" 
+                    onclick="document.getElementById('test-api-form').submit()"
+                    variant="ghost" 
+                    size="sm"
+                >
+                    テスト
+                </flux:button>
+            </div>
+
+            @if ($message = session('snippet_api_test_success'))
+                <flux:card class="bg-green-50 text-green-800 border border-green-200">
+                    <flux:text>✓ {{ $message }}</flux:text>
+                </flux:card>
+            @endif
+
+            @if ($message = session('snippet_api_test_error'))
+                <flux:card class="bg-red-50 text-red-800 border border-red-200">
+                    <flux:text>✗ {{ $message }}</flux:text>
+                </flux:card>
+            @endif
+
+            <div class="flex gap-2">
                 <flux:button type="submit" variant="primary">更新</flux:button>
                 <flux:button href="{{ route('proxmox-clusters.index') }}" variant="ghost">キャンセル</flux:button>
             </div>
+        </form>
+
+        <form id="test-api-form" method="POST" action="{{ route('proxmox-clusters.test-snippet-api', $node->getId()) }}">
+            @csrf
         </form>
     </div>
 </x-layouts::app>

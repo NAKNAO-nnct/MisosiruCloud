@@ -195,20 +195,37 @@ curl -fsSL https://get.docker.com | sh
 cd /opt/misosiru-cloud/snippet-api
 docker build -t misosiru-cloud/snippet-api:latest .
 
-# 3. コンテナ起動
+# 3. スニペット保存先ディレクトリを作成
+mkdir -p /var/lib/vz/snippets
+
+# 4. コンテナ起動
 docker run -d \
   --name snippet-api \
   --restart always \
-  -p 172.26.26.11:8100:8100 \
-  -v /var/lib/vz/snippets:/app/snippets \
-  -e SNIPPET_DIR=/app/snippets \
-  -e API_TOKEN=${SNIPPET_API_TOKEN} \
-  -e BIND_HOST=0.0.0.0 \
-  -e BIND_PORT=8100 \
+  -p 172.26.26.11:8100:8080 \
+  -v /var/lib/vz/snippets:/var/lib/vz/snippets \
+  -e SNIPPET_API_TOKEN=${SNIPPET_API_TOKEN} \
+  -e SNIPPET_PATH=/var/lib/vz/snippets \
   misosiru-cloud/snippet-api:latest
 
-# 4. 動作確認
+# 5. 動作確認
 curl http://172.26.26.11:8100/health
+
+# 6. コンテナ内テスト実行
+docker exec snippet-api python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Laravel 側の各 `proxmox_nodes` レコードには、対応ノードの sidecar URL とトークンを設定する。
+
+- `snippet_api_url`: 例 `http://172.26.26.11:8100`
+- `snippet_api_token_encrypted`: sidecar 起動時に指定した `SNIPPET_API_TOKEN`
+
+開発環境ではルートの compose から sidecar を起動できる。
+
+```bash
+docker compose up -d snippet-api
+curl http://127.0.0.1:18080/health
+docker compose exec -T snippet-api python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ### 2.4 S3 プロキシ (Compose 内)

@@ -20,7 +20,8 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 | ネットワーク管理 | ✅ 完了 | Network 一覧/作成/詳細/削除、Proxmox SDN 連携、テスト実装済み |
 | VPS ゲートウェイ管理 | ✅ 完了 | VPS 登録/詳細/更新/削除/同期、WireGuard conf 生成、テスト実装済み |
 | 監視・可観測性 | ❌ 未着手 | Monitoring 機能未実装 |
-| スニペットサイドカーAPI | ❌ 未着手 | `snippet-api/` 未作成 |
+| スニペットサイドカーAPI | ✅ 完了 | FastAPI sidecar、Laravel `Lib\\Snippet`、ローカル compose、テスト実装済み |
+| S3 プロキシサーバ (Go) | ❌ 未着手 | `s3-proxy/` 未作成 |
 
 ---
 
@@ -37,6 +38,12 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 | Phase 7 | [phase-7-network-vps.md](phase-7-network-vps.md) | ネットワーク管理・VPS ゲートウェイ管理 | Phase 2, 3 |
 | Phase 8 | [phase-8-monitoring.md](phase-8-monitoring.md) | 監視・可観測性：Grafana Cloud 埋め込み・OTel 連携 | Phase 1 |
 | Phase 9 | [phase-9-sidecar-api.md](phase-9-sidecar-api.md) | スニペットサイドカー API (Python / FastAPI)・Snippet クライアント | Phase 2 |
+| Phase 10 | [phase-10-s3-proxy.md](phase-10-s3-proxy.md) | S3 プロキシサーバ (Go)：AWS Sig V4 検証・テナント隔離・外部 S3 転送 | Phase 1, 3 |
+| Phase 11 | [phase-11-app-layer.md](phase-11-app-layer.md) | アプリケーションレイヤー基盤：Data/Repository/非同期ジョブ (Queue) | Phase 1〜5 |
+| Phase 12 | [phase-12-補完.md](phase-12-補完.md) | 既存フェーズ補完：Admin ユーザ管理・Nomad 拡張・Snippet API 修正 | Phase 6, 9 |
+| Phase 13 | [phase-13-infra-base.md](phase-13-infra-base.md) | インフラ基盤：Docker Compose (prod)・CoreDNS・Harbor・SSL/TLS | Phase 10 |
+| Phase 14 | [phase-14-packer.md](phase-14-packer.md) | Packer VM テンプレート：ベース・DBaaS・Nomad Worker テンプレート自動生成 | Phase 13 |
+| Phase 15 | [phase-15-transit-vm.md](phase-15-transit-vm.md) | Transit VM & ネットワーク基盤：VRRP・WireGuard・PBR | Phase 7 |
 
 ---
 
@@ -45,10 +52,14 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 ```
 Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅ → Phase 4 ✅ → Phase 5 ⚠️
                                            ↓
-                                        Phase 6 ❌
-                               Phase 7 ✅ ────┘
-Phase 8 ❌ (Phase 1 後いつでも可)
-Phase 9 ❌ (Phase 2 後いつでも可)
+                                        Phase 6 ⚠️ → Phase 12 ❌ (Nomad 拡張・Admin User)
+                               Phase 7 ✅ ────┘          ↓
+                                  ↓                   Phase 12 ❌ (Snippet API 修正)
+Phase 8 ❌ (Phase 1 後いつでも可)  ↓
+Phase 9 ✅ ─────────────────────────┘
+Phase 10 ❌ (Phase 3 後) → Phase 13 ❌ (インフラ基盤) → Phase 14 ❌ (Packer)
+Phase 11 ❌ (Phase 1〜5 実装後のリファクタリング)
+Phase 15 ❌ (Phase 7 後、Transit VM 構築)
 ```
 
 ---
@@ -65,7 +76,13 @@ Phase 9 ❌ (Phase 2 後いつでも可)
 | Phase 6 | ⚠️ 部分実装 | Nomad ライブラリ・ContainerService・Deploy系画面/ルート実装済み。詳細操作系は未実装 |
 | Phase 7 | ✅ 完了 | Network/VPS/DNS 管理（Service/Controller/View/Route/Test）実装済み |
 | Phase 8 | ❌ 未着手 | MonitoringService/画面/OTel ジョブ定義未着手 |
-| Phase 9 | ❌ 未着手 | Python Sidecar API と `Lib\\Snippet` 未着手 |
+| Phase 9 | ✅ 完了 | Python Sidecar API、`Lib\\Snippet`、`VmService` 連携、ローカル compose、Unit/Feature/Python テスト実装済み |
+| Phase 10 | ❌ 未着手 | Go S3 プロキシサーバ・`Lib\\S3Proxy\\CredentialManager` 未着手 |
+| Phase 11 | ❌ 未着手 | Data/Repository レイヤー・非同期ジョブ (ProvisionVmJob 等)・Queue 設定 未着手 |
+| Phase 12 | ❌ 未着手 | Admin\\User CRUD・Nomad Allocation/Node/Quota・Snippet API 仕様修正 未着手 |
+| Phase 13 | ❌ 未着手 | compose.prod.yaml・CoreDNS・Harbor・Let's Encrypt 証明書 未着手 |
+| Phase 14 | ❌ 未着手 | Packer テンプレート (base-ubuntu/dbaas-*/nomad-worker) 未着手 |
+| Phase 15 | ❌ 未着手 | Transit VM (VRRP/WireGuard/PBR) 構築 未着手 |
 
 ---
 

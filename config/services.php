@@ -37,6 +37,7 @@ return [
 
     'proxmox' => [
         'sdn_zone' => env('PROXMOX_SDN_ZONE'),
+        'snippet_storage' => env('PROXMOX_SNIPPET_STORAGE', 'local'),
     ],
 
     'nomad' => [

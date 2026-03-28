@@ -38,3 +38,15 @@ services:
     image: redis:latest
     ports:
       - ${COMPOSE_REDIS_PORT:-6379}:6379
+
+  snippet-api:
+    build:
+      context: ./snippet-api
+      dockerfile: Dockerfile
+    environment:
+      SNIPPET_API_TOKEN: ${SNIPPET_API_TOKEN:-local-snippet-token}
+      SNIPPET_PATH: ${SNIPPET_PATH:-/data/snippets}
+    ports:
+      - ${COMPOSE_SNIPPET_API_PORT:-18080}:8080
+    volumes:
+      - ./snippet-api/data/snippets:${SNIPPET_PATH:-/data/snippets}

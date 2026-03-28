@@ -11,6 +11,8 @@ use App\Lib\Nomad\Client as NomadClient;
 use App\Lib\Nomad\NomadApi;
 use App\Lib\Proxmox\Client as ProxmoxClient;
 use App\Lib\Proxmox\ProxmoxApi;
+use App\Lib\Snippet\SnippetClient;
+use App\Lib\Snippet\SnippetClientFactory;
 use App\Models\ProxmoxNode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Blade;
@@ -27,6 +29,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(SnippetClientFactory::class, fn (): SnippetClientFactory => new SnippetClientFactory());
+
+        $this->app->bind(SnippetClient::class, function ($app): ?SnippetClient {
+            /** @var SnippetClientFactory $factory */
+            $factory = $app->make(SnippetClientFactory::class);
+
+            return $factory->forActiveNode();
+        });
+
         $this->app->singleton(DnsProviderInterface::class, fn (): DnsProviderInterface => new SakuraDnsProvider(
             baseUrl: (string) config('services.dns.sakura.base_url', ''),
             apiToken: (string) config('services.dns.sakura.api_token', ''),

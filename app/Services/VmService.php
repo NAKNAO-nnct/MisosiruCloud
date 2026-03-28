@@ -8,6 +8,7 @@ use App\Data\Tenant\TenantData;
 use App\Data\Vm\VmMetaData;
 use App\Enums\VmStatus;
 use App\Lib\Proxmox\ProxmoxApi;
+use App\Lib\Snippet\SnippetClientFactory;
 use App\Repositories\VmMetaRepository;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -18,6 +19,7 @@ class VmService
     public function __construct(
         private readonly ?ProxmoxApi $api,
         private readonly VmMetaRepository $vmMetaRepository,
+        private readonly ?SnippetClientFactory $snippetClientFactory = null,
     ) {
     }
 
@@ -111,9 +113,17 @@ class VmService
 
             $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Configuring]);
 
+            $snippetFilename = $this->buildSnippetFilename((int) $params['new_vmid']);
+            $this->uploadVmSnippet($params['node'], $snippetFilename, $this->buildCloudInitUserData($tenant, $params));
+
             $config = array_filter([
                 'cores' => $params['cpu'] ?? null,
                 'memory' => $params['memory_mb'] ?? null,
+                'cicustom' => sprintf(
+                    'user=%s:snippets/%s',
+                    (string) config('services.proxmox.snippet_storage', 'local'),
+                    $snippetFilename,
+                ),
             ]);
 
             if (!empty($config)) {
@@ -145,6 +155,8 @@ class VmService
     public function terminateVm(VmMetaData $vmMeta): void
     {
         $this->ensureProxmoxApiConfigured();
+
+        $this->deleteVmSnippet($vmMeta->getProxmoxNode(), $this->buildSnippetFilename($vmMeta->getProxmoxVmid()));
 
         try {
             $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
@@ -237,6 +249,61 @@ class VmService
     {
         if (!$this->api) {
             throw new RuntimeException('No active Proxmox node configured.');
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function buildCloudInitUserData(TenantData $tenant, array $params): string
+    {
+        $hostname = (string) ($params['label'] ?? ('vm-' . $params['new_vmid']));
+
+        return implode("\n", [
+            '#cloud-config',
+            'hostname: ' . $hostname,
+            'fqdn: ' . $hostname . '.' . $tenant->getSlug() . '.local',
+            'manage_etc_hosts: true',
+            '',
+        ]);
+    }
+
+    private function buildSnippetFilename(int $vmid): string
+    {
+        return sprintf('vm-%d-user-data.yaml', $vmid);
+    }
+
+    private function uploadVmSnippet(string $nodeName, string $filename, string $content): void
+    {
+        if (!$this->snippetClientFactory) {
+            return;
+        }
+
+        $client = $this->snippetClientFactory->forNodeIfConfigured($nodeName);
+
+        if (!$client) {
+            return;
+        }
+
+        $client->upload($filename, $content);
+    }
+
+    private function deleteVmSnippet(string $nodeName, string $filename): void
+    {
+        if (!$this->snippetClientFactory) {
+            return;
+        }
+
+        try {
+            $client = $this->snippetClientFactory->forNodeIfConfigured($nodeName);
+
+            if (!$client) {
+                return;
+            }
+
+            $client->delete($filename);
+        } catch (Throwable) {
+            // Snippet cleanup failure should not block VM termination.
         }
     }
 }
