@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -183,8 +184,29 @@ func (v *Verifier) buildCanonicalRequest(r *http.Request, payloadHash string, si
 		canonicalURI = "/"
 	}
 
-	// CanonicalQueryString: sorted query parameters
-	canonicalQuery := r.URL.RawQuery
+	// CanonicalQueryString: sorted query parameters (URI RFC 3986 sorted)
+	canonicalQuery := ""
+	if r.URL.RawQuery != "" {
+		params, err := url.ParseQuery(r.URL.RawQuery)
+		if err == nil {
+			// Sort keys
+			var keys []string
+			for k := range params {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			// Build canonical form: key1=value1&key2=value2...
+			var queryParts []string
+			for _, k := range keys {
+				for _, v := range params[k] {
+					queryParts = append(queryParts, url.QueryEscape(k)+"="+url.QueryEscape(v))
+				}
+			}
+			canonicalQuery = strings.Join(queryParts, "&")
+		} else {
+			canonicalQuery = r.URL.RawQuery
+		}
+	}
 
 	// CanonicalHeaders: sorted lowercase header:trimmed-value\n
 	sort.Strings(signedHeaders)

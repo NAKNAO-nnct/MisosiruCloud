@@ -119,7 +119,16 @@ func (h *Handler) rewriteListPrefix(rawQuery string, cred *auth.Credential) stri
 
 // forwardRequest forwards the request to the backend S3 service
 func (h *Handler) forwardRequest(w http.ResponseWriter, r *http.Request, bucket, key, rawQuery string, cred *auth.Credential) error {
-	backendReqURL := fmt.Sprintf("%s/%s/%s", h.backendURL, bucket, key)
+	// For ListObjectsV2, path should be just /bucket/ with all filtering in query params
+	var backendReqURL string
+	if strings.Contains(rawQuery, "list-type") {
+		// ListObjectsV2: /bucket/?prefix=...&list-type=2&...
+		backendReqURL = fmt.Sprintf("%s/%s/", h.backendURL, bucket)
+	} else {
+		// Regular object operation: /bucket/key
+		backendReqURL = fmt.Sprintf("%s/%s/%s", h.backendURL, bucket, key)
+	}
+	
 	if rawQuery != "" {
 		backendReqURL += "?" + rawQuery
 	}
