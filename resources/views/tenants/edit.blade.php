@@ -12,13 +12,13 @@
             @method('PUT')
 
             <flux:field>
-                <flux:label>名前 <flux:required /></flux:label>
+                <flux:label>名前 <span class="text-red-500">*</span></flux:label>
                 <flux:input name="name" value="{{ old('name', $tenant->name) }}" required />
                 <flux:error name="name" />
             </flux:field>
 
             <flux:field>
-                <flux:label>スラッグ <flux:required /></flux:label>
+                <flux:label>スラッグ <span class="text-red-500">*</span></flux:label>
                 <flux:input name="slug" value="{{ old('slug', $tenant->slug) }}" required />
                 <flux:description>小文字英数字とハイフンのみ使用できます。</flux:description>
                 <flux:error name="slug" />

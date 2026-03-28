@@ -21,12 +21,12 @@
                 class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                 @csrf
                 <flux:field>
-                    <flux:label>バケット <flux:required /></flux:label>
+                    <flux:label>バケット <span class="text-red-500">*</span></flux:label>
                     <flux:input name="allowed_bucket" value="{{ old('allowed_bucket') }}" required />
                     <flux:error name="allowed_bucket" />
                 </flux:field>
                 <flux:field>
-                    <flux:label>プレフィックス <flux:required /></flux:label>
+                    <flux:label>プレフィックス <span class="text-red-500">*</span></flux:label>
                     <flux:input name="allowed_prefix" value="{{ old('allowed_prefix', $tenant->slug . '/') }}" required />
                     <flux:error name="allowed_prefix" />
                 </flux:field>
