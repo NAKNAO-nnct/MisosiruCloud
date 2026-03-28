@@ -59,6 +59,12 @@ use App\Http\Controllers\Vm\SnapshotController as VmSnapshot;
 use App\Http\Controllers\Vm\StartController as VmStart;
 use App\Http\Controllers\Vm\StopController as VmStop;
 use App\Http\Controllers\Vm\StoreController as VmStore;
+use App\Http\Controllers\VpsGateway\DestroyController as VpsGatewayDestroy;
+use App\Http\Controllers\VpsGateway\IndexController as VpsGatewayIndex;
+use App\Http\Controllers\VpsGateway\ShowController as VpsGatewayShow;
+use App\Http\Controllers\VpsGateway\StoreController as VpsGatewayStore;
+use App\Http\Controllers\VpsGateway\SyncController as VpsGatewaySync;
+use App\Http\Controllers\VpsGateway\UpdateController as VpsGatewayUpdate;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('dashboard'));
@@ -135,6 +141,15 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::delete('/{proxmoxNode}', ProxmoxNodeDestroy::class)->name('destroy');
             Route::post('/{proxmoxNode}/activate', ProxmoxNodeActivate::class)->name('activate');
             Route::post('/{proxmoxNode}/deactivate', ProxmoxNodeDeactivate::class)->name('deactivate');
+        });
+
+        Route::prefix('vps-gateways')->name('vps-gateways.')->group(function (): void {
+            Route::get('/', VpsGatewayIndex::class)->name('index');
+            Route::post('/', VpsGatewayStore::class)->name('store');
+            Route::get('/{vpsGateway}', VpsGatewayShow::class)->name('show');
+            Route::put('/{vpsGateway}', VpsGatewayUpdate::class)->name('update');
+            Route::delete('/{vpsGateway}', VpsGatewayDestroy::class)->name('destroy');
+            Route::post('/{vpsGateway}/sync', VpsGatewaySync::class)->name('sync');
         });
     });
 

@@ -37,6 +37,9 @@
                         <flux:navlist.item icon="server" :href="route('proxmox-clusters.index')" :current="request()->routeIs('proxmox-clusters.*')">
                             Proxmox クラスタ
                         </flux:navlist.item>
+                        <flux:navlist.item icon="server" :href="route('vps-gateways.index')" :current="request()->routeIs('vps-gateways.*')">
+                            VPS ゲートウェイ
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endif
             </flux:navlist>
