@@ -6,6 +6,7 @@ namespace App\Repositories;
 
 use App\Data\Dbaas\BackupScheduleData;
 use App\Models\BackupSchedule;
+use Illuminate\Support\Collection;
 
 class BackupScheduleRepository
 {
@@ -39,5 +40,17 @@ class BackupScheduleRepository
         $model->update($data);
 
         return BackupScheduleData::of($model->fresh());
+    }
+
+    /**
+     * @return Collection<int, BackupScheduleData>
+     */
+    public function allEnabled(): Collection
+    {
+        return BackupSchedule::query()
+            ->where('is_enabled', true)
+            ->orderBy('database_instance_id')
+            ->get()
+            ->map(fn (BackupSchedule $schedule) => BackupScheduleData::of($schedule));
     }
 }
