@@ -9,7 +9,9 @@ use App\Enums\TenantStatus;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Repositories\TenantRepository;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class TenantService
@@ -35,7 +37,7 @@ class TenantService
 
             $id = $tenantData->getId();
             $vni = 10000 + $id;
-            $vnetName = "tenant-{$id}";
+            $vnetName = "tenant{$id}";
             $networkCidr = "10.{$id}.0.0/24";
 
             $tenantData = $this->tenantRepository->update($id, [
@@ -46,9 +48,11 @@ class TenantService
             ]);
 
             if ($this->proxmoxApi) {
+                $zone = $this->resolveSdnZone();
+
                 $this->proxmoxApi->cluster()->createVnet([
                     'vnet' => $vnetName,
-                    'zone' => 'localzone',
+                    'zone' => $zone,
                     'tag' => $vni,
                 ]);
 
@@ -57,7 +61,15 @@ class TenantService
                     'type' => 'subnet',
                 ]);
 
-                $this->proxmoxApi->cluster()->applySdn();
+                try {
+                    $this->proxmoxApi->cluster()->applySdn();
+                } catch (Throwable $e) {
+                    Log::warning('SDN apply failed after tenant network creation', [
+                        'tenant_id' => $tenantData->getId(),
+                        'vnet' => $vnetName,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
             }
 
             $this->s3CredentialService->createForTenant(
@@ -93,5 +105,39 @@ class TenantService
         }
 
         $this->tenantRepository->update($id, ['status' => TenantStatus::Deleted]);
+    }
+
+    private function resolveSdnZone(): string
+    {
+        if (!$this->proxmoxApi) {
+            throw new RuntimeException('Proxmox API is not configured.');
+        }
+
+        $zones = $this->proxmoxApi->cluster()->listZones();
+        $preferredZone = (string) config('services.proxmox.sdn_zone', '');
+
+        if ($preferredZone !== '') {
+            foreach ($zones as $zone) {
+                if (($zone['zone'] ?? null) === $preferredZone) {
+                    return $preferredZone;
+                }
+            }
+        }
+
+        foreach ($zones as $zone) {
+            if (($zone['zone'] ?? null) === 'localzone') {
+                return 'localzone';
+            }
+        }
+
+        foreach ($zones as $zone) {
+            $zoneName = $zone['zone'] ?? null;
+
+            if (is_string($zoneName) && $zoneName !== '') {
+                return $zoneName;
+            }
+        }
+
+        throw new RuntimeException('No available Proxmox SDN zone found.');
     }
 }

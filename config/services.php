@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'proxmox' => [
+        'sdn_zone' => env('PROXMOX_SDN_ZONE'),
+    ],
+
 ];
