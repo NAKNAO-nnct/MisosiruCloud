@@ -52,9 +52,7 @@ WORKDIR /var/www
 
 COPY ./ /var/www/
 
-RUN --mount=type=secret,id=composer_auth,required=false \
-    if [ -f /run/secrets/composer_auth ]; then export COMPOSER_AUTH=$(cat /run/secrets/composer_auth); fi \
-    && composer install --no-interaction --optimize-autoloader
+RUN composer install --no-interaction --optimize-autoloader
 
 RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/*
