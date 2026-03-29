@@ -170,8 +170,11 @@ test('VM作成時にProvisionVmJobがキュー投入される', function (): voi
             'new_vmid' => 200,
             'cpu' => 2,
             'memory_mb' => 2048,
+            'ip_address' => '10.1.0.10',
+            'gateway' => '10.1.0.1',
+            'vnet_name' => 'vnet_1',
         ])
-        ->assertRedirect(route('vms.index'));
+        ->assertRedirect(route('vms.show', 200));
 
     Queue::assertPushed(ProvisionVmJob::class);
 });

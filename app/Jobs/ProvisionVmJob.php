@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Data\Vm\ProvisionVmCommand;
-use App\Repositories\TenantRepository;
+use App\Repositories\VmMetaRepository;
 use App\Services\VmService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -20,24 +19,27 @@ final class ProvisionVmJob implements ShouldQueue
 
     public int $tries = 1;
 
+    /**
+     * @param array<string, mixed> $templateParams ['template_vmid' => int, 'cpu' => int|null, 'memory_mb' => int|null, 'disk_gb' => int|null]
+     */
     public function __construct(
-        private ProvisionVmCommand $command,
+        private int $vmMetaId,
+        private array $templateParams,
     ) {
         $this->onConnection('provisioning');
         $this->queue = 'provisioning';
     }
 
     public function handle(
-        TenantRepository $tenantRepository,
+        VmMetaRepository $vmMetaRepository,
         VmService $vmService,
     ): void {
-        $tenantId = $this->command->getTenantId();
-        $tenant = $tenantRepository->findByIdOrFail($tenantId);
+        $vmMeta = $vmMetaRepository->findByIdOrFail($this->vmMetaId);
 
         try {
-            $vmService->provisionVm($tenant, $this->command->toArray());
+            $vmService->provisionVm($vmMeta, $this->templateParams);
         } catch (Throwable $e) {
-            throw new RuntimeException("Failed to provision VM for tenant {$tenantId}: {$e->getMessage()}", 0, $e);
+            throw new RuntimeException("Failed to provision VM (id={$this->vmMetaId}): {$e->getMessage()}", 0, $e);
         }
     }
 }

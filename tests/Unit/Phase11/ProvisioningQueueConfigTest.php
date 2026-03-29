@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use App\Data\Dbaas\ProvisionDbaasCommand;
-use App\Data\Vm\ProvisionVmCommand;
 use App\Jobs\DestroyVmJob;
 use App\Jobs\ProvisionDbaasJob;
 use App\Jobs\ProvisionVmJob;
@@ -21,13 +20,7 @@ test('provisioning queue connection is configured', function (): void {
 });
 
 test('provisioning jobs use expected connection, timeout and tries', function (): void {
-    $provisionVmJob = new ProvisionVmJob(ProvisionVmCommand::make([
-        'tenant_id' => 1,
-        'label' => 'vm-1',
-        'template_vmid' => 9000,
-        'node' => 'pve1',
-        'new_vmid' => 201,
-    ]));
+    $provisionVmJob = new ProvisionVmJob(201, ['template_vmid' => 9000, 'node' => 'pve1']);
     $provisionDbaasJob = new ProvisionDbaasJob(ProvisionDbaasCommand::make([
         'tenant_id' => 1,
         'db_type' => 'mysql',

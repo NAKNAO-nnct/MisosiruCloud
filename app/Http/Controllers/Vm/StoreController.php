@@ -9,12 +9,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Vm\CreateVmRequest;
 use App\Jobs\ProvisionVmJob;
 use App\Repositories\TenantRepository;
+use App\Services\VmService;
 use Illuminate\Http\RedirectResponse;
 
 class StoreController extends Controller
 {
     public function __construct(
         private readonly TenantRepository $tenantRepository,
+        private readonly VmService $vmService,
     ) {
     }
 
@@ -24,8 +26,16 @@ class StoreController extends Controller
         $tenant = $this->tenantRepository->findByIdOrFail($request->integer('tenant_id'));
 
         $command = ProvisionVmCommand::make($validated);
-        ProvisionVmJob::dispatch($command);
+        $vmMeta = $this->vmService->createVmMeta($tenant, $command);
 
-        return redirect()->route('vms.index')->with('success', 'VMのプロビジョニングを開始しました。');
+        ProvisionVmJob::dispatch($vmMeta->getId(), [
+            'template_vmid' => $command->getTemplateVmid(),
+            'cpu' => $command->getCpu(),
+            'memory_mb' => $command->getMemoryMb(),
+            'disk_gb' => $command->getDiskGb(),
+        ]);
+
+        return redirect()->route('vms.show', $vmMeta->getProxmoxVmid())
+            ->with('success', 'VMのプロビジョニングを開始しました。');
     }
 }

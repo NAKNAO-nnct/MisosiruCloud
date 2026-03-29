@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Data\Vm\ProvisionVmCommand;
 use App\Enums\VmStatus;
 use App\Jobs\DestroyVmJob;
 use App\Lib\Proxmox\ProxmoxApi;
@@ -31,8 +32,8 @@ test('provision vm flow updates provisioning status to ready', function (): void
     app()->instance(ProxmoxApi::class, $api);
 
     $tenantData = app(TenantRepository::class)->findByIdOrFail($tenant->id);
-
-    $meta = app(VmService::class)->provisionVm($tenantData, [
+    $command = ProvisionVmCommand::make([
+        'tenant_id' => $tenant->id,
         'label' => 'phase11-vm',
         'template_vmid' => 9000,
         'node' => 'pve1',
@@ -40,9 +41,21 @@ test('provision vm flow updates provisioning status to ready', function (): void
         'cpu' => 2,
         'memory_mb' => 2048,
         'disk_gb' => 10,
+        'ip_address' => '10.1.0.10',
+        'gateway' => '10.1.0.1',
+        'vnet_name' => 'vnet_1',
     ]);
 
-    expect($meta->getProvisioningStatus())->toBe(VmStatus::Ready);
+    $vmMeta = app(VmService::class)->createVmMeta($tenantData, $command);
+    app(VmService::class)->provisionVm($vmMeta, [
+        'template_vmid' => 9000,
+        'cpu' => 2,
+        'memory_mb' => 2048,
+        'disk_gb' => 10,
+    ]);
+
+    $updated = app(VmMetaRepository::class)->findByIdOrFail($vmMeta->getId());
+    expect($updated->getProvisioningStatus())->toBe(VmStatus::Ready);
 });
 
 test('provision vm flow stores provisioning error on failure', function (): void {
@@ -56,20 +69,30 @@ test('provision vm flow stores provisioning error on failure', function (): void
     app()->instance(ProxmoxApi::class, $api);
 
     $tenantData = app(TenantRepository::class)->findByIdOrFail($tenant->id);
+    $command = ProvisionVmCommand::make([
+        'tenant_id' => $tenant->id,
+        'label' => 'phase11-vm-error',
+        'template_vmid' => 9000,
+        'node' => 'pve1',
+        'new_vmid' => 9402,
+        'ip_address' => '10.1.0.11',
+        'gateway' => '10.1.0.1',
+        'vnet_name' => 'vnet_1',
+    ]);
+    $vmMeta = app(VmService::class)->createVmMeta($tenantData, $command);
 
-    expect(function () use ($tenantData): void {
-        app(VmService::class)->provisionVm($tenantData, [
-            'label' => 'phase11-vm-error',
+    expect(function () use ($vmMeta): void {
+        app(VmService::class)->provisionVm($vmMeta, [
             'template_vmid' => 9000,
             'node' => 'pve1',
             'new_vmid' => 9402,
         ]);
     })->toThrow(RuntimeException::class, 'VM provisioning failed: clone failed');
 
-    $vmMeta = VmMeta::query()->where('proxmox_vmid', 9402)->firstOrFail();
+    $record = VmMeta::query()->where('proxmox_vmid', 9402)->firstOrFail();
 
-    expect($vmMeta->provisioning_status)->toBe(VmStatus::Error)
-        ->and($vmMeta->provisioning_error)->toContain('clone failed');
+    expect($record->provisioning_status)->toBe(VmStatus::Error)
+        ->and($record->provisioning_error)->toContain('clone failed');
 });
 
 test('destroy vm job deletes vm meta after proxmox and snippet cleanup', function (): void {

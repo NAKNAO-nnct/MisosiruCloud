@@ -26,6 +26,10 @@ class VmMetaFactory extends Factory
             'purpose' => fake()->randomElement(['general', 'dbaas', 'nomad_worker']),
             'label' => fake()->words(2, true),
             'shared_ip_address' => null,
+            'ip_address' => null,
+            'gateway' => null,
+            'vnet_name' => null,
+            'ssh_keys' => null,
             'provisioning_status' => VmStatus::Ready,
             'provisioning_error' => null,
         ];

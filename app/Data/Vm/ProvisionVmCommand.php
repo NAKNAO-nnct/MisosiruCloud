@@ -16,6 +16,11 @@ final readonly class ProvisionVmCommand
         private ?int $memoryMb,
         private ?int $diskGb,
         private ?string $purpose,
+        private string $ipAddress,
+        private string $gateway,
+        private string $vnetName,
+        private ?string $sharedIpAddress,
+        private ?string $sshKeys,
     ) {
     }
 
@@ -34,6 +39,11 @@ final readonly class ProvisionVmCommand
             memoryMb: isset($attributes['memory_mb']) ? (int) $attributes['memory_mb'] : null,
             diskGb: isset($attributes['disk_gb']) ? (int) $attributes['disk_gb'] : null,
             purpose: isset($attributes['purpose']) ? (string) $attributes['purpose'] : null,
+            ipAddress: (string) ($attributes['ip_address'] ?? ''),
+            gateway: (string) ($attributes['gateway'] ?? ''),
+            vnetName: (string) ($attributes['vnet_name'] ?? ''),
+            sharedIpAddress: isset($attributes['shared_ip_address']) ? (string) $attributes['shared_ip_address'] : null,
+            sshKeys: isset($attributes['ssh_keys']) ? (string) $attributes['ssh_keys'] : null,
         );
     }
 
@@ -82,6 +92,31 @@ final readonly class ProvisionVmCommand
         return $this->purpose;
     }
 
+    public function getIpAddress(): string
+    {
+        return $this->ipAddress;
+    }
+
+    public function getGateway(): string
+    {
+        return $this->gateway;
+    }
+
+    public function getVnetName(): string
+    {
+        return $this->vnetName;
+    }
+
+    public function getSharedIpAddress(): ?string
+    {
+        return $this->sharedIpAddress;
+    }
+
+    public function getSshKeys(): ?string
+    {
+        return $this->sshKeys;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -97,6 +132,11 @@ final readonly class ProvisionVmCommand
             'memory_mb' => $this->memoryMb,
             'disk_gb' => $this->diskGb,
             'purpose' => $this->purpose,
+            'ip_address' => $this->ipAddress,
+            'gateway' => $this->gateway,
+            'vnet_name' => $this->vnetName,
+            'shared_ip_address' => $this->sharedIpAddress,
+            'ssh_keys' => $this->sshKeys,
         ];
     }
 }

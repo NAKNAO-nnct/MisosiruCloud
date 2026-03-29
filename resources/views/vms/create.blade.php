@@ -10,6 +10,11 @@
             'memory_mb' => request()->query('memory_mb'),
             'disk_gb' => request()->query('disk_gb'),
             'purpose' => request()->query('purpose'),
+            'ip_address' => request()->query('ip_address'),
+            'gateway' => request()->query('gateway'),
+            'vnet_name' => request()->query('vnet_name'),
+            'shared_ip_address' => request()->query('shared_ip_address'),
+            'ssh_keys' => request()->query('ssh_keys'),
         ];
     @endphp
 
@@ -93,6 +98,40 @@
                 <flux:label>用途 (purpose)</flux:label>
                 <flux:input name="purpose" value="{{ old('purpose', $prefill['purpose']) }}" placeholder="mysql, postgres, redis など" />
                 <flux:error name="purpose" />
+            </flux:field>
+
+            <flux:heading size="lg">ネットワーク設定</flux:heading>
+
+            <div class="grid grid-cols-2 gap-4">
+                <flux:field>
+                    <flux:label>IP アドレス</flux:label>
+                    <flux:input name="ip_address" value="{{ old('ip_address', $prefill['ip_address']) }}" placeholder="10.1.0.10" />
+                    <flux:error name="ip_address" />
+                </flux:field>
+
+                <flux:field>
+                    <flux:label>ゲートウェイ</flux:label>
+                    <flux:input name="gateway" value="{{ old('gateway', $prefill['gateway']) }}" placeholder="10.1.0.1" />
+                    <flux:error name="gateway" />
+                </flux:field>
+            </div>
+
+            <flux:field>
+                <flux:label>VNet 名</flux:label>
+                <flux:input name="vnet_name" value="{{ old('vnet_name', $prefill['vnet_name']) }}" placeholder="vnet_1" />
+                <flux:error name="vnet_name" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>共有 IP アドレス（オプション）</flux:label>
+                <flux:input name="shared_ip_address" value="{{ old('shared_ip_address', $prefill['shared_ip_address']) }}" placeholder="203.0.113.5" />
+                <flux:error name="shared_ip_address" />
+            </flux:field>
+
+            <flux:field>
+                <flux:label>SSH 公開鍵（オプション）</flux:label>
+                <flux:textarea name="ssh_keys" placeholder="ssh-rsa AAAA...">{{ old('ssh_keys', $prefill['ssh_keys']) }}</flux:textarea>
+                <flux:error name="ssh_keys" />
             </flux:field>
 
             <div class="flex gap-2">

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Data\Tenant\TenantData;
+use App\Data\Vm\ProvisionVmCommand;
 use App\Data\Vm\VmDetailResponseData;
 use App\Data\Vm\VmMetaData;
 use App\Enums\VmStatus;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Lib\Snippet\SnippetClientFactory;
 use App\Repositories\VmMetaRepository;
+use App\Services\CloudInit\CloudInitBuilder;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -21,6 +23,7 @@ class VmService
         private readonly ?ProxmoxApi $api,
         private readonly VmMetaRepository $vmMetaRepository,
         private readonly ?SnippetClientFactory $snippetClientFactory = null,
+        private readonly ?CloudInitBuilder $cloudInitBuilder = null,
     ) {
     }
 
@@ -83,72 +86,114 @@ class VmService
     }
 
     /**
-     * @param array<string, mixed> $params
+     * vm_metas レコードを同期的に作成して返す。
+     * Controller から呼び出し、返された ID を ProvisionVmJob に渡す。
      */
-    public function provisionVm(TenantData $tenant, array $params): VmMetaData
+    public function createVmMeta(TenantData $tenant, ProvisionVmCommand $command): VmMetaData
+    {
+        return DB::transaction(fn () => $this->vmMetaRepository->create([
+            'tenant_id' => $tenant->getId(),
+            'proxmox_vmid' => $command->getNewVmid(),
+            'proxmox_node' => $command->getNode(),
+            'purpose' => $command->getPurpose(),
+            'label' => $command->getLabel(),
+            'ip_address' => $command->getIpAddress(),
+            'gateway' => $command->getGateway(),
+            'vnet_name' => $command->getVnetName(),
+            'shared_ip_address' => $command->getSharedIpAddress(),
+            'ssh_keys' => $command->getSshKeys(),
+            'provisioning_status' => VmStatus::Pending,
+        ]));
+    }
+
+    /**
+     * ProvisionVmJob から呼び出される非同期プロビジョニング処理（テンプレート VMID 付き）。
+     *
+     * @param array<string, mixed> $templateParams ['template_vmid' => int, 'disk_gb' => int|null]
+     */
+    public function provisionVm(VmMetaData $vmMeta, array $templateParams): void
     {
         $this->ensureProxmoxApiConfigured();
 
-        $vmMetaData = DB::transaction(fn () => $this->vmMetaRepository->create([
-            'tenant_id' => $tenant->getId(),
-            'proxmox_vmid' => $params['new_vmid'],
-            'proxmox_node' => $params['node'],
-            'purpose' => $params['purpose'] ?? null,
-            'label' => $params['label'],
-            'provisioning_status' => VmStatus::Pending,
-        ]));
+        $builder = $this->cloudInitBuilder ?? new CloudInitBuilder();
+        $vmid = $vmMeta->getProxmoxVmid();
+        $node = $vmMeta->getProxmoxNode();
+        $hostname = $vmMeta->getLabel();
+        $fqdn = $hostname . '.local';
+        $ipAddress = $vmMeta->getIpAddress() ?? '';
+        $gateway = $vmMeta->getGateway() ?? '';
+        $vnetName = $vmMeta->getVnetName() ?? '';
+        $sharedIp = $vmMeta->getSharedIpAddress();
+        $sshKeys = $vmMeta->getSshKeys();
+        $templateVmid = (int) ($templateParams['template_vmid'] ?? 0);
+        $diskGb = isset($templateParams['disk_gb']) ? (int) $templateParams['disk_gb'] : null;
+        $cpu = isset($templateParams['cpu']) ? (int) $templateParams['cpu'] : 2;
+        $memoryMb = isset($templateParams['memory_mb']) ? (int) $templateParams['memory_mb'] : 2048;
 
         try {
-            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Cloning]);
+            $this->vmMetaRepository->update($vmMeta->getId(), ['provisioning_status' => VmStatus::Uploading]);
 
-            $upid = $this->api->vm()->cloneVm($params['node'], (int) $params['template_vmid'], [
-                'newid' => $params['new_vmid'],
-                'name' => $params['label'],
+            $userData = $builder->buildUserData([
+                'hostname' => $hostname,
+                'fqdn' => $fqdn,
+                'ssh_keys' => $sshKeys,
+            ]);
+            $networkConfig = $builder->buildNetworkConfig(
+                ipCidr: $ipAddress . '/24',
+                gateway: $gateway,
+                sharedIp: $sharedIp,
+            );
+            $metaData = $builder->buildMetaData($vmid, $hostname);
+
+            $this->uploadVmSnippet($node, $vmid, $userData, $networkConfig, $metaData);
+
+            $this->vmMetaRepository->update($vmMeta->getId(), ['provisioning_status' => VmStatus::Cloning]);
+
+            $upid = $this->api->vm()->cloneVm($node, $templateVmid, [
+                'newid' => $vmid,
+                'name' => $hostname,
                 'full' => 1,
             ]);
+            $this->api->vm()->waitForTask($node, $upid);
 
-            $this->api->vm()->waitForTask($params['node'], $upid);
+            $this->vmMetaRepository->update($vmMeta->getId(), ['provisioning_status' => VmStatus::Configuring]);
 
-            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Configuring]);
-
-            $newVmid = (int) $params['new_vmid'];
-            $snippetFilename = $this->buildSnippetFilename($newVmid);
-            $this->uploadVmSnippet($params['node'], $newVmid, $this->buildCloudInitUserData($tenant, $params));
-
-            $config = array_filter([
-                'cores' => $params['cpu'] ?? null,
-                'memory' => $params['memory_mb'] ?? null,
+            $storage = (string) config('services.proxmox.snippet_storage', 'local');
+            $config = [
+                'cores' => $cpu,
+                'memory' => $memoryMb,
+                'net0' => 'virtio,bridge=' . $vnetName,
                 'cicustom' => sprintf(
-                    'user=%s:snippets/%s',
-                    (string) config('services.proxmox.snippet_storage', 'local'),
-                    $snippetFilename,
+                    'user=%1$s:snippets/vm-%2$d-user-data.yaml,network=%1$s:snippets/vm-%2$d-network-config.yaml,meta=%1$s:snippets/vm-%2$d-meta-data.yaml',
+                    $storage,
+                    $vmid,
                 ),
-            ]);
+            ];
 
-            if (!empty($config)) {
-                $this->api->vm()->updateVmConfig($params['node'], (int) $params['new_vmid'], $config);
+            if ($sharedIp !== null && $sharedIp !== '') {
+                $config['net1'] = 'virtio,bridge=vmbr1';
             }
 
-            if (!empty($params['disk_gb'])) {
-                $this->api->vm()->resizeVm($params['node'], (int) $params['new_vmid'], 'scsi0', "+{$params['disk_gb']}G");
+            $this->api->vm()->updateVmConfig($node, $vmid, $config);
+
+            if ($diskGb !== null && $diskGb > 0) {
+                $this->api->vm()->resizeVm($node, $vmid, 'scsi0', "+{$diskGb}G");
             }
 
-            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Starting]);
+            $this->vmMetaRepository->update($vmMeta->getId(), ['provisioning_status' => VmStatus::Starting]);
 
-            $upid = $this->api->vm()->startVm($params['node'], (int) $params['new_vmid']);
-            $this->api->vm()->waitForTask($params['node'], $upid);
+            $upid = $this->api->vm()->startVm($node, $vmid);
+            $this->api->vm()->waitForTask($node, $upid);
 
-            $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Ready]);
+            $this->vmMetaRepository->update($vmMeta->getId(), ['provisioning_status' => VmStatus::Ready]);
         } catch (Throwable $e) {
-            $this->vmMetaRepository->update($vmMetaData->getId(), [
+            $this->vmMetaRepository->update($vmMeta->getId(), [
                 'provisioning_status' => VmStatus::Error,
                 'provisioning_error' => $e->getMessage(),
             ]);
 
             throw new RuntimeException("VM provisioning failed: {$e->getMessage()}", 0, $e);
         }
-
-        return $this->vmMetaRepository->findByIdOrFail($vmMetaData->getId());
     }
 
     public function terminateVm(VmMetaData $vmMeta): void
@@ -251,29 +296,13 @@ class VmService
         }
     }
 
-    /**
-     * @param array<string, mixed> $params
-     */
-    private function buildCloudInitUserData(TenantData $tenant, array $params): string
-    {
-        $hostname = (string) ($params['label'] ?? ('vm-' . $params['new_vmid']));
-
-        return implode("\n", [
-            '#cloud-config',
-            'hostname: ' . $hostname,
-            'fqdn: ' . $hostname . '.' . $tenant->getSlug() . '.local',
-            'manage_etc_hosts: true',
-            '',
-        ]);
-    }
-
-    private function buildSnippetFilename(int $vmid): string
-    {
-        return sprintf('vm-%d-user-data.yaml', $vmid);
-    }
-
-    private function uploadVmSnippet(string $nodeName, int $vmId, string $userData): void
-    {
+    private function uploadVmSnippet(
+        string $nodeName,
+        int $vmId,
+        string $userData,
+        ?string $networkConfig = null,
+        ?string $metaData = null,
+    ): void {
         if (!$this->snippetClientFactory) {
             return;
         }
@@ -284,7 +313,7 @@ class VmService
             return;
         }
 
-        $client->upload($vmId, $userData);
+        $client->upload($vmId, $userData, $networkConfig, $metaData);
     }
 
     private function deleteVmSnippet(string $nodeName, int $vmId): void

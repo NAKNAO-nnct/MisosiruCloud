@@ -28,6 +28,11 @@ class CreateVmRequest extends FormRequest
             'node' => ['required', 'string', 'max:255'],
             'new_vmid' => ['required', 'integer'],
             'purpose' => ['nullable', 'string', 'max:255'],
+            'ip_address' => ['required', 'ip'],
+            'gateway' => ['required', 'ip'],
+            'vnet_name' => ['required', 'string', 'max:64'],
+            'shared_ip_address' => ['nullable', 'ip'],
+            'ssh_keys' => ['nullable', 'string'],
         ];
     }
 }

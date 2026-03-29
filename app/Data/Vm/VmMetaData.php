@@ -17,6 +17,10 @@ final readonly class VmMetaData
         private ?string $purpose,
         private string $label,
         private ?string $sharedIpAddress,
+        private ?string $ipAddress,
+        private ?string $gateway,
+        private ?string $vnetName,
+        private ?string $sshKeys,
         private VmStatus $provisioningStatus,
         private ?string $provisioningError,
         private ?string $tenantName,
@@ -36,6 +40,10 @@ final readonly class VmMetaData
             purpose: $model->purpose,
             label: $model->label,
             sharedIpAddress: $model->shared_ip_address,
+            ipAddress: $model->ip_address,
+            gateway: $model->gateway,
+            vnetName: $model->vnet_name,
+            sshKeys: $model->ssh_keys,
             provisioningStatus: $model->provisioning_status,
             provisioningError: $model->provisioning_error,
             tenantName: $model->relationLoaded('tenant') ? $model->tenant?->name : null,
@@ -57,6 +65,10 @@ final readonly class VmMetaData
             purpose: isset($attributes['purpose']) ? (string) $attributes['purpose'] : null,
             label: (string) ($attributes['label'] ?? ''),
             sharedIpAddress: isset($attributes['shared_ip_address']) ? (string) $attributes['shared_ip_address'] : null,
+            ipAddress: isset($attributes['ip_address']) ? (string) $attributes['ip_address'] : null,
+            gateway: isset($attributes['gateway']) ? (string) $attributes['gateway'] : null,
+            vnetName: isset($attributes['vnet_name']) ? (string) $attributes['vnet_name'] : null,
+            sshKeys: isset($attributes['ssh_keys']) ? (string) $attributes['ssh_keys'] : null,
             provisioningStatus: $status instanceof VmStatus ? $status : VmStatus::from((string) $status),
             provisioningError: isset($attributes['provisioning_error']) ? (string) $attributes['provisioning_error'] : null,
             tenantName: isset($attributes['tenant_name']) ? (string) $attributes['tenant_name'] : null,
@@ -98,6 +110,26 @@ final readonly class VmMetaData
         return $this->sharedIpAddress;
     }
 
+    public function getIpAddress(): ?string
+    {
+        return $this->ipAddress;
+    }
+
+    public function getGateway(): ?string
+    {
+        return $this->gateway;
+    }
+
+    public function getVnetName(): ?string
+    {
+        return $this->vnetName;
+    }
+
+    public function getSshKeys(): ?string
+    {
+        return $this->sshKeys;
+    }
+
     public function getProvisioningStatus(): VmStatus
     {
         return $this->provisioningStatus;
@@ -125,6 +157,10 @@ final readonly class VmMetaData
             'purpose' => $this->purpose,
             'label' => $this->label,
             'shared_ip_address' => $this->sharedIpAddress,
+            'ip_address' => $this->ipAddress,
+            'gateway' => $this->gateway,
+            'vnet_name' => $this->vnetName,
+            'ssh_keys' => $this->sshKeys,
             'provisioning_status' => $this->provisioningStatus,
             'provisioning_error' => $this->provisioningError,
         ];

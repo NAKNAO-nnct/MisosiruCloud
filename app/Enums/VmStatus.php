@@ -7,6 +7,7 @@ namespace App\Enums;
 enum VmStatus: string
 {
     case Pending = 'pending';
+    case Uploading = 'uploading';
     case Cloning = 'cloning';
     case Configuring = 'configuring';
     case Starting = 'starting';

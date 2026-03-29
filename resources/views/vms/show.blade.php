@@ -1,7 +1,7 @@
 <x-layouts::app :title="__('VM 詳細')">
     @php
         $provisioningStatus = $meta?->getProvisioningStatus();
-        $isProvisioning = in_array($provisioningStatus?->value, ['pending', 'cloning', 'configuring', 'starting'], true);
+        $isProvisioning = in_array($provisioningStatus?->value, ['pending', 'uploading', 'cloning', 'configuring', 'starting'], true);
         $isProvisioningError = $provisioningStatus?->value === 'error';
     @endphp
 
@@ -70,7 +70,19 @@
                             <dd>{{ $meta->getPurpose() ?? '-' }}</dd>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-zinc-500">IP アドレス</dt>
+                            <dt class="text-zinc-500">VNet</dt>
+                            <dd>{{ $meta->getVnetName() ?? '-' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-zinc-500">内部 IP</dt>
+                            <dd>{{ $meta->getIpAddress() ?? '-' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-zinc-500">ゲートウェイ</dt>
+                            <dd>{{ $meta->getGateway() ?? '-' }}</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-zinc-500">共有 IP</dt>
                             <dd>{{ $meta->getSharedIpAddress() ?? '-' }}</dd>
                         </div>
                     </dl>

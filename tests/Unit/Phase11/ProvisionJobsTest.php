@@ -5,90 +5,71 @@ declare(strict_types=1);
 use App\Data\Dbaas\DatabaseInstanceData;
 use App\Data\Dbaas\ProvisionDbaasCommand;
 use App\Data\Tenant\TenantData;
-use App\Data\Vm\ProvisionVmCommand;
 use App\Data\Vm\VmMetaData;
 use App\Jobs\ProvisionDbaasJob;
 use App\Jobs\ProvisionVmJob;
 use App\Repositories\TenantRepository;
+use App\Repositories\VmMetaRepository;
 use App\Services\DbaasService;
 use App\Services\VmService;
+use Tests\TestCase;
 
-test('provision vm job resolves tenant and calls vm service', function (): void {
-    $command = ProvisionVmCommand::make([
+uses(TestCase::class);
+
+test('provision vm job resolves vm meta and calls vm service', function (): void {
+    $vmMeta = VmMetaData::make([
+        'id' => 1,
         'tenant_id' => 9,
+        'proxmox_vmid' => 310,
+        'proxmox_node' => 'pve1',
         'label' => 'web-01',
-        'template_vmid' => 9000,
-        'node' => 'pve1',
-        'new_vmid' => 310,
+        'provisioning_status' => 'pending',
     ]);
 
-    $tenant = TenantData::make([
-        'id' => 9,
-        'uuid' => 'tenant-9',
-        'name' => 'Tenant 9',
-        'slug' => 'tenant-9',
-        'status' => 'active',
-    ]);
-
-    $tenantRepository = Mockery::mock(TenantRepository::class);
-    $tenantRepository->shouldReceive('findByIdOrFail')
+    $vmMetaRepository = $this->mock(VmMetaRepository::class);
+    $vmMetaRepository->shouldReceive('findByIdOrFail')
         ->once()
-        ->with(9)
-        ->andReturn($tenant);
+        ->with(1)
+        ->andReturn($vmMeta);
 
-    $vmService = Mockery::mock(VmService::class);
+    $vmService = $this->mock(VmService::class);
     $vmService->shouldReceive('provisionVm')
         ->once()
-        ->with($tenant, $command->toArray())
-        ->andReturn(VmMetaData::make([
-            'id' => 1,
-            'tenant_id' => 9,
-            'proxmox_vmid' => 310,
-            'proxmox_node' => 'pve1',
-            'label' => 'web-01',
-            'provisioning_status' => 'ready',
-        ]));
+        ->with($vmMeta, ['template_vmid' => 9000, 'node' => 'pve1']);
 
-    $job = new ProvisionVmJob($command);
+    $job = new ProvisionVmJob(1, ['template_vmid' => 9000, 'node' => 'pve1']);
 
-    $job->handle($tenantRepository, $vmService);
+    $job->handle($vmMetaRepository, $vmService);
 
     expect(true)->toBeTrue();
 });
 
 test('provision vm job wraps service exception', function (): void {
-    $command = ProvisionVmCommand::make([
+    $vmMeta = VmMetaData::make([
+        'id' => 2,
         'tenant_id' => 10,
+        'proxmox_vmid' => 311,
+        'proxmox_node' => 'pve2',
         'label' => 'db-01',
-        'template_vmid' => 9000,
-        'node' => 'pve2',
-        'new_vmid' => 311,
+        'provisioning_status' => 'pending',
     ]);
 
-    $tenant = TenantData::make([
-        'id' => 10,
-        'uuid' => 'tenant-10',
-        'name' => 'Tenant 10',
-        'slug' => 'tenant-10',
-        'status' => 'active',
-    ]);
-
-    $tenantRepository = Mockery::mock(TenantRepository::class);
-    $tenantRepository->shouldReceive('findByIdOrFail')
+    $vmMetaRepository = $this->mock(VmMetaRepository::class);
+    $vmMetaRepository->shouldReceive('findByIdOrFail')
         ->once()
-        ->with(10)
-        ->andReturn($tenant);
+        ->with(2)
+        ->andReturn($vmMeta);
 
-    $vmService = Mockery::mock(VmService::class);
+    $vmService = $this->mock(VmService::class);
     $vmService->shouldReceive('provisionVm')
         ->once()
-        ->with($tenant, $command->toArray())
+        ->with($vmMeta, ['template_vmid' => 9000, 'node' => 'pve2'])
         ->andThrow(new RuntimeException('clone failed'));
 
-    $job = new ProvisionVmJob($command);
+    $job = new ProvisionVmJob(2, ['template_vmid' => 9000, 'node' => 'pve2']);
 
-    expect(fn () => $job->handle($tenantRepository, $vmService))
-        ->toThrow(RuntimeException::class, 'Failed to provision VM for tenant 10: clone failed');
+    expect(fn () => $job->handle($vmMetaRepository, $vmService))
+        ->toThrow(RuntimeException::class, 'Failed to provision VM (id=2): clone failed');
 });
 
 test('provision dbaas job resolves tenant and calls dbaas service', function (): void {

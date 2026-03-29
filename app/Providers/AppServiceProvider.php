@@ -14,6 +14,7 @@ use App\Lib\Proxmox\ProxmoxApi;
 use App\Lib\Snippet\SnippetClient;
 use App\Lib\Snippet\SnippetClientFactory;
 use App\Models\ProxmoxNode;
+use App\Services\CloudInit\CloudInitBuilder;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Date;
@@ -30,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(SnippetClientFactory::class, fn (): SnippetClientFactory => new SnippetClientFactory());
+
+        $this->app->singleton(CloudInitBuilder::class, fn (): CloudInitBuilder => new CloudInitBuilder(
+            dnsResolvers: (array) config('services.dns.resolvers', ['1.1.1.1', '8.8.8.8']),
+        ));
 
         $this->app->bind(SnippetClient::class, function ($app): ?SnippetClient {
             /** @var SnippetClientFactory $factory */

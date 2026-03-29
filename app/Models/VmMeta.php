@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['tenant_id', 'proxmox_vmid', 'proxmox_node', 'purpose', 'label', 'shared_ip_address', 'provisioning_status', 'provisioning_error'])]
+#[Fillable(['tenant_id', 'proxmox_vmid', 'proxmox_node', 'purpose', 'label', 'shared_ip_address', 'ip_address', 'gateway', 'vnet_name', 'ssh_keys', 'provisioning_status', 'provisioning_error'])]
 class VmMeta extends Model
 {
     /** @use HasFactory<VmMetaFactory> */

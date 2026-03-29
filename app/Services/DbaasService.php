@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Data\Dbaas\DatabaseInstanceData;
 use App\Data\Tenant\TenantData;
+use App\Data\Vm\ProvisionVmCommand;
 use App\Enums\DatabaseType;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Repositories\BackupScheduleRepository;
@@ -39,9 +40,19 @@ class DbaasService
         $vmParams = array_merge($params, [
             'label' => $params['label'] ?? "{$tenant->getSlug()}-{$params['db_type']}",
             'purpose' => $params['db_type'],
+            'ip_address' => $params['ip_address'] ?? '',
+            'gateway' => $params['gateway'] ?? '',
+            'vnet_name' => $params['vnet_name'] ?? '',
         ]);
 
-        $vmMeta = $this->vmService->provisionVm($tenant, $vmParams);
+        $command = ProvisionVmCommand::make($vmParams);
+        $vmMeta = $this->vmService->createVmMeta($tenant, $command);
+        $this->vmService->provisionVm($vmMeta, [
+            'template_vmid' => $command->getTemplateVmid(),
+            'cpu' => $command->getCpu(),
+            'memory_mb' => $command->getMemoryMb(),
+            'disk_gb' => $command->getDiskGb(),
+        ]);
 
         return DB::transaction(function () use ($tenant, $vmMeta, $dbType, $params, $port, $adminPassword, $backupKey): DatabaseInstanceData {
             $db = $this->dbInstanceRepository->create([
