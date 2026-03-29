@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\User\EditController as AdminUserEdit;
 use App\Http\Controllers\Admin\User\IndexController as AdminUserIndex;
 use App\Http\Controllers\Admin\User\StoreController as AdminUserStore;
 use App\Http\Controllers\Admin\User\UpdateController as AdminUserUpdate;
+use App\Http\Controllers\Api\CheckVmidController as ApiCheckVmid;
 use App\Http\Controllers\Api\ContainerStatusController as ApiContainerStatus;
 use App\Http\Controllers\Api\DbaasStatusController as ApiDbaasStatus;
 use App\Http\Controllers\Api\NodeStatusController as ApiNodeStatus;
@@ -67,6 +68,8 @@ use App\Http\Controllers\Vm\CreateController as VmCreate;
 use App\Http\Controllers\Vm\DestroyController as VmDestroy;
 use App\Http\Controllers\Vm\ForceStopController as VmForceStop;
 use App\Http\Controllers\Vm\IndexController as VmIndex;
+use App\Http\Controllers\Vm\MetaDestroyController as VmMetaDestroy;
+use App\Http\Controllers\Vm\ProvisioningJobsController as VmProvisioningJobs;
 use App\Http\Controllers\Vm\RebootController as VmReboot;
 use App\Http\Controllers\Vm\ResizeController as VmResize;
 use App\Http\Controllers\Vm\ShowController as VmShow;
@@ -116,6 +119,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
         Route::prefix('vms')->name('vms.')->group(function (): void {
             Route::get('/', VmIndex::class)->name('index');
+            Route::get('/provisioning-jobs', VmProvisioningJobs::class)->name('provisioning-jobs');
             Route::get('/create', VmCreate::class)->name('create');
             Route::post('/', VmStore::class)->name('store');
             Route::get('/{vmid}', VmShow::class)->name('show');
@@ -127,6 +131,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::post('/{vmid}/snapshot', VmSnapshot::class)->name('snapshot');
             Route::post('/{vmid}/resize', VmResize::class)->name('resize');
             Route::delete('/{vmid}', VmDestroy::class)->name('destroy');
+            Route::delete('/meta/{id}', VmMetaDestroy::class)->name('meta.destroy');
         });
 
         Route::prefix('dbaas')->name('dbaas.')->group(function (): void {
@@ -194,6 +199,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
 
     Route::prefix('api')->name('api.')->group(function (): void {
         Route::get('vms/{vmid}/status', ApiVmStatus::class)->name('vms.status');
+        Route::get('vms/{vmid}/check', ApiCheckVmid::class)->name('vms.check');
         Route::get('nodes/status', ApiNodeStatus::class)->name('nodes.status');
         Route::get('dbaas/{database}/status', ApiDbaasStatus::class)->name('dbaas.status');
         Route::get('containers/{container}/status', ApiContainerStatus::class)->name('containers.status');

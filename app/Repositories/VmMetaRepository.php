@@ -106,4 +106,21 @@ class VmMetaRepository
     {
         VmMeta::query()->findOrFail($id)->delete();
     }
+
+    public function forceDelete(int $id): void
+    {
+        VmMeta::query()->withTrashed()->findOrFail($id)->forceDelete();
+    }
+
+    /**
+     * @return Collection<int, VmMetaData>
+     */
+    public function allWithTenantDesc(): Collection
+    {
+        return VmMeta::query()
+            ->with('tenant')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (VmMeta $m) => VmMetaData::of($m));
+    }
 }

@@ -277,6 +277,25 @@ class VmService
      *
      * @return array{nodes: array<int, string>, nextVmid: int|null}
      */
+    /**
+     * 指定した VMID が Proxmox クラスタ上に存在するかチェックする。
+     * 存在する場合はそのノード名を返し、存在しない場合は null を返す。
+     */
+    public function vmidExistsOnCluster(int $vmid): ?string
+    {
+        if (!$this->api) {
+            return null;
+        }
+
+        foreach ($this->listAllVms() as $vm) {
+            if ((int) ($vm['vmid'] ?? 0) === $vmid) {
+                return (string) ($vm['node'] ?? '');
+            }
+        }
+
+        return null;
+    }
+
     public function getFormOptions(): array
     {
         if (!$this->api) {

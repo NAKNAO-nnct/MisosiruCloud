@@ -31,6 +31,9 @@
                         <flux:navlist.item icon="folder-git-2" :href="route('vms.index')" :current="request()->routeIs('vms.*')">
                             VM管理
                         </flux:navlist.item>
+                        <flux:navlist.item icon="briefcase" :href="route('vms.provisioning-jobs')" :current="request()->routeIs('vms.provisioning-jobs')">
+                            プロビジョニングジョブ
+                        </flux:navlist.item>
                         <flux:navlist.item icon="chevrons-up-down" :href="route('dbaas.index')" :current="request()->routeIs('dbaas.*')">
                             DBaaS管理
                         </flux:navlist.item>

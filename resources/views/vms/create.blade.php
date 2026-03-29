@@ -68,9 +68,50 @@
                 <flux:error name="node" />
             </flux:field>
 
-            <flux:field>
+            <flux:field
+                x-data="{
+                    vmid: '{{ old('new_vmid', $prefill['new_vmid'] ?? $nextVmid) }}',
+                    status: null,
+                    loading: false,
+                    async check() {
+                        if (!this.vmid) return;
+                        this.loading = true;
+                        this.status = null;
+                        try {
+                            const res = await fetch(`/api/vms/${encodeURIComponent(this.vmid)}/check`);
+                            const data = await res.json();
+                            this.status = data.exists
+                                ? { type: 'error', message: `VMID ${this.vmid} はノード「${data.node}」で使用中です` }
+                                : { type: 'success', message: `VMID ${this.vmid} は使用可能です` };
+                        } catch {
+                            this.status = { type: 'error', message: 'チェックに失敗しました' };
+                        } finally {
+                            this.loading = false;
+                        }
+                    }
+                }"
+            >
                 <flux:label>新しい VMID</flux:label>
-                <flux:input type="number" name="new_vmid" value="{{ old('new_vmid', $prefill['new_vmid'] ?? $nextVmid) }}" placeholder="200" />
+                <div class="flex gap-2 items-start">
+                    <flux:input
+                        type="number"
+                        name="new_vmid"
+                        x-model="vmid"
+                        value="{{ old('new_vmid', $prefill['new_vmid'] ?? $nextVmid) }}"
+                        placeholder="200"
+                        class="flex-1"
+                    />
+                    <flux:button
+                        type="button"
+                        icon="magnifying-glass"
+                        variant="ghost"
+                        @click="check"
+                        x-bind:disabled="loading"
+                    >チェック</flux:button>
+                </div>
+                <template x-if="status">
+                    <p class="mt-1 text-sm" :class="status.type === 'success' ? 'text-green-600' : 'text-red-600'" x-text="status.message"></p>
+                </template>
                 <flux:error name="new_vmid" />
             </flux:field>
 

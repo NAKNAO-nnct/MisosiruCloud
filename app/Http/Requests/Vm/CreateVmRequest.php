@@ -26,7 +26,7 @@ class CreateVmRequest extends FormRequest
             'disk_gb' => ['nullable', 'integer', 'min:1'],
             'template_vmid' => ['required', 'integer'],
             'node' => ['required', 'string', 'max:255'],
-            'new_vmid' => ['required', 'integer'],
+            'new_vmid' => ['required', 'integer', 'unique:vm_metas,proxmox_vmid'],
             'purpose' => ['nullable', 'string', 'max:255'],
             'ip_address' => ['required', 'ip'],
             'gateway' => ['required', 'ip'],
