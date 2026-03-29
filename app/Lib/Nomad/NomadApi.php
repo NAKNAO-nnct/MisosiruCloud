@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Lib\Nomad;
 
+use App\Lib\Nomad\Resources\Allocation;
 use App\Lib\Nomad\Resources\Job;
 use App\Lib\Nomad\Resources\Namespace_;
+use App\Lib\Nomad\Resources\Node;
+use App\Lib\Nomad\Resources\Quota;
 
 class NomadApi
 {
@@ -21,5 +24,20 @@ class NomadApi
     public function namespace(): Namespace_
     {
         return new Namespace_($this->client);
+    }
+
+    public function allocation(): Allocation
+    {
+        return new Allocation($this->client);
+    }
+
+    public function node(): Node
+    {
+        return new Node($this->client);
+    }
+
+    public function quota(): Quota
+    {
+        return new Quota($this->client);
     }
 }

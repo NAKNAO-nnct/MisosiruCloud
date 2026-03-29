@@ -89,7 +89,7 @@ test('destroy vm job deletes vm meta after proxmox and snippet cleanup', functio
     app()->instance(ProxmoxApi::class, $api);
 
     $snippetClient = Mockery::mock(SnippetClient::class);
-    $snippetClient->shouldReceive('delete')->once()->with('vm-9403-user-data.yaml');
+    $snippetClient->shouldReceive('delete')->once()->with(9403);
 
     $snippetFactory = Mockery::mock(SnippetClientFactory::class);
     $snippetFactory->shouldReceive('forNodeIfConfigured')->once()->with('pve1')->andReturn($snippetClient);

@@ -111,8 +111,9 @@ class VmService
 
             $this->vmMetaRepository->update($vmMetaData->getId(), ['provisioning_status' => VmStatus::Configuring]);
 
-            $snippetFilename = $this->buildSnippetFilename((int) $params['new_vmid']);
-            $this->uploadVmSnippet($params['node'], $snippetFilename, $this->buildCloudInitUserData($tenant, $params));
+            $newVmid = (int) $params['new_vmid'];
+            $snippetFilename = $this->buildSnippetFilename($newVmid);
+            $this->uploadVmSnippet($params['node'], $newVmid, $this->buildCloudInitUserData($tenant, $params));
 
             $config = array_filter([
                 'cores' => $params['cpu'] ?? null,
@@ -154,7 +155,7 @@ class VmService
     {
         $this->ensureProxmoxApiConfigured();
 
-        $this->deleteVmSnippet($vmMeta->getProxmoxNode(), $this->buildSnippetFilename($vmMeta->getProxmoxVmid()));
+        $this->deleteVmSnippet($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
 
         try {
             $this->api->vm()->forceStopVm($vmMeta->getProxmoxNode(), $vmMeta->getProxmoxVmid());
@@ -271,7 +272,7 @@ class VmService
         return sprintf('vm-%d-user-data.yaml', $vmid);
     }
 
-    private function uploadVmSnippet(string $nodeName, string $filename, string $content): void
+    private function uploadVmSnippet(string $nodeName, int $vmId, string $userData): void
     {
         if (!$this->snippetClientFactory) {
             return;
@@ -283,10 +284,10 @@ class VmService
             return;
         }
 
-        $client->upload($filename, $content);
+        $client->upload($vmId, $userData);
     }
 
-    private function deleteVmSnippet(string $nodeName, string $filename): void
+    private function deleteVmSnippet(string $nodeName, int $vmId): void
     {
         if (!$this->snippetClientFactory) {
             return;
@@ -299,7 +300,7 @@ class VmService
                 return;
             }
 
-            $client->delete($filename);
+            $client->delete($vmId);
         } catch (Throwable) {
             // Snippet cleanup failure should not block VM termination.
         }

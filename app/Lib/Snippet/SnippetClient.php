@@ -15,13 +15,14 @@ class SnippetClient
     ) {
     }
 
-    public function upload(string $filename, string $content): void
+    public function upload(int $vmId, string $userData, ?string $networkConfig = null, ?string $metaData = null): void
     {
-        $this->validateFilename($filename);
+        $this->validateVmId($vmId);
 
-        $response = $this->request()->post($this->url('/snippets'), [
-            'filename' => $filename,
-            'content' => $content,
+        $response = $this->request()->post($this->url('/snippets/' . $vmId), [
+            'user_data' => $userData,
+            'network_config' => $networkConfig,
+            'meta_data' => $metaData,
         ]);
 
         if ($response->failed()) {
@@ -29,21 +30,39 @@ class SnippetClient
         }
     }
 
-    public function delete(string $filename): void
+    /**
+     * @return array<string, mixed>
+     */
+    public function get(int $vmId): array
     {
-        $this->validateFilename($filename);
+        $this->validateVmId($vmId);
 
-        $response = $this->request()->delete($this->url('/snippets/' . $filename));
+        $response = $this->request()->get($this->url('/snippets/' . $vmId));
+
+        if ($response->failed()) {
+            throw new SnippetApiException('Snippet fetch failed: ' . $response->status() . ' ' . $response->body());
+        }
+
+        $json = $response->json();
+
+        return is_array($json) ? $json : [];
+    }
+
+    public function delete(int $vmId): void
+    {
+        $this->validateVmId($vmId);
+
+        $response = $this->request()->delete($this->url('/snippets/' . $vmId));
 
         if ($response->failed()) {
             throw new SnippetApiException('Snippet delete failed: ' . $response->status() . ' ' . $response->body());
         }
     }
 
-    private function validateFilename(string $filename): void
+    private function validateVmId(int $vmId): void
     {
-        if ($filename === '' || str_contains($filename, '..') || str_contains($filename, '/') || str_contains($filename, '\\')) {
-            throw new SnippetApiException('Invalid snippet filename.');
+        if ($vmId < 100 || $vmId > 999_999_999) {
+            throw new SnippetApiException('Invalid vm_id.');
         }
     }
 

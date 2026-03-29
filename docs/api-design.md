@@ -135,15 +135,33 @@
 
 ### 2.11 DNS 管理
 
-内部インフラゾーン (`infra.example.com`) のレコードは外部 DNS プロバイダ API (さくらのクラウド DNS 等) で管理する。
-管理画面から DNS プロバイダ API を呼び出してレコードの CRUD を行う。
+ゾーン単位で DNS レコードを管理する。ゾーンごとに異なるプロバイダ（Cloudflare / さくら DNS / ローカル CoreDNS）を指定できる。
+管理画面からの操作は DB に保存し、対応する DNS プロバイダ API (または CoreDNS ゾーンファイル生成) を呼び出す。
+
+#### 2.11.1 ゾーン管理
 
 | メソッド | パス | Controller | 説明 | 権限 |
 |---------|------|-----------|------|------|
-| GET | /admin/dns | Admin\Dns\Index | DNS レコード一覧 (API経由で取得) | admin |
-| POST | /admin/dns | Admin\Dns\Store | DNS レコード追加 (API経由で作成) | admin |
-| PUT | /admin/dns/{id} | Admin\Dns\Update | DNS レコード更新 (API経由で更新) | admin |
-| DELETE | /admin/dns/{id} | Admin\Dns\Destroy | DNS レコード削除 (API経由で削除) | admin |
+| GET | /admin/dns | Admin\Dns\ZoneIndex | DNS ゾーン一覧 | admin |
+| POST | /admin/dns/zones | Admin\Dns\ZoneStore | DNS ゾーン追加 | admin |
+| PUT | /admin/dns/zones/{zone} | Admin\Dns\ZoneUpdate | DNS ゾーン更新 | admin |
+| DELETE | /admin/dns/zones/{zone} | Admin\Dns\ZoneDestroy | DNS ゾーン削除 | admin |
+
+#### 2.11.2 レコード管理
+
+| メソッド | パス | Controller | 説明 | 権限 |
+|---------|------|-----------|------|------|
+| GET | /admin/dns/zones/{zone}/records | Admin\Dns\RecordIndex | DNS レコード一覧 (DB + API マージ) | admin |
+| POST | /admin/dns/zones/{zone}/records | Admin\Dns\RecordStore | DNS レコード追加 (DB 保存 + Provider 反映) | admin |
+| PUT | /admin/dns/zones/{zone}/records/{record} | Admin\Dns\RecordUpdate | DNS レコード更新 (DB 保存 + Provider 反映) | admin |
+| DELETE | /admin/dns/zones/{zone}/records/{record} | Admin\Dns\RecordDestroy | DNS レコード削除 (DB 削除 + Provider 反映) | admin |
+
+#### 2.11.3 同期・再生成
+
+| メソッド | パス | Controller | 説明 | 権限 |
+|---------|------|-----------|------|------|
+| POST | /admin/dns/zones/{zone}/sync | Admin\Dns\ZoneSync | 外部プロバイダからレコードを同期 (DB へインポート) | admin |
+| POST | /admin/dns/reload | Admin\Dns\Reload | ローカル CoreDNS ゾーンファイル再生成 + リロード | admin |
 
 ### 2.12 VPS ゲートウェイ管理
 
@@ -493,10 +511,17 @@ Route::middleware('auth')->group(function () {
 
             // DNS 管理
             Route::prefix('dns')->name('dns.')->group(function () {
-                Route::get('/', Controllers\Admin\Dns\Index::class)->name('index');
-                Route::post('/', Controllers\Admin\Dns\Store::class)->name('store');
-                Route::put('/{id}', Controllers\Admin\Dns\Update::class)->name('update');
-                Route::delete('/{id}', Controllers\Admin\Dns\Destroy::class)->name('destroy');
+                Route::get('/', Controllers\Admin\Dns\ZoneIndex::class)->name('index');
+                Route::post('/zones', Controllers\Admin\Dns\ZoneStore::class)->name('zones.store');
+                Route::put('/zones/{zone}', Controllers\Admin\Dns\ZoneUpdate::class)->name('zones.update');
+                Route::delete('/zones/{zone}', Controllers\Admin\Dns\ZoneDestroy::class)->name('zones.destroy');
+                Route::post('/zones/{zone}/sync', Controllers\Admin\Dns\ZoneSync::class)->name('zones.sync');
+
+                Route::get('/zones/{zone}/records', Controllers\Admin\Dns\RecordIndex::class)->name('records.index');
+                Route::post('/zones/{zone}/records', Controllers\Admin\Dns\RecordStore::class)->name('records.store');
+                Route::put('/zones/{zone}/records/{record}', Controllers\Admin\Dns\RecordUpdate::class)->name('records.update');
+                Route::delete('/zones/{zone}/records/{record}', Controllers\Admin\Dns\RecordDestroy::class)->name('records.destroy');
+
                 Route::post('/reload', Controllers\Admin\Dns\Reload::class)->name('reload');
             });
         });

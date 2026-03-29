@@ -52,9 +52,9 @@ Laravel + Livewire + Flux UI によるサーバサイドレンダリングベー
 ```
 Phase 1 ✅ → Phase 2 ✅ → Phase 3 ✅ → Phase 4 ✅ → Phase 5 ⚠️
                                            ↓
-                                        Phase 6 ⚠️ → Phase 12 ❌ (Nomad 拡張・Admin User)
+                                        Phase 6 ⚠️ → Phase 12 ✅ (補完完了)
                                Phase 7 ✅ ────┘          ↓
-                                  ↓                   Phase 12 ❌ (Snippet API 修正)
+                                  ↓                   Phase 9 ✅
 Phase 8 ❌ (Phase 1 後いつでも可)  ↓
 Phase 9 ✅ ─────────────────────────┘
 Phase 10 ❌ (Phase 3 後) → Phase 13 ❌ (インフラ基盤) → Phase 14 ❌ (Packer)
@@ -79,7 +79,7 @@ Phase 15 ❌ (Phase 7 後、Transit VM 構築)
 | Phase 9 | ✅ 完了 | Python Sidecar API、`Lib\\Snippet`、`VmService` 連携、ローカル compose、Unit/Feature/Python テスト実装済み |
 | Phase 10 | ❌ 未着手 | Go S3 プロキシサーバ・`Lib\\S3Proxy\\CredentialManager` 未着手 |
 | Phase 11 | ✅ 完了 | Data/Repository/Queue/非同期ジョブ・UI運用導線（ポーリング/リトライ）・Repository/Feature/Unit テストまで実装済み |
-| Phase 12 | ❌ 未着手 | Admin\\User CRUD・Nomad Allocation/Node/Quota・Snippet API 仕様修正 未着手 |
+| Phase 12 | ✅ 完了 | Admin\\User CRUD、Nomad Allocation/Node/Quota、Snippet API 仕様修正まで実装・テスト完了 |
 | Phase 13 | ❌ 未着手 | compose.prod.yaml・CoreDNS・Harbor・Let's Encrypt 証明書 未着手 |
 | Phase 14 | ❌ 未着手 | Packer テンプレート (base-ubuntu/dbaas-*/nomad-worker) 未着手 |
 | Phase 15 | ❌ 未着手 | Transit VM (VRRP/WireGuard/PBR) 構築 未着手 |

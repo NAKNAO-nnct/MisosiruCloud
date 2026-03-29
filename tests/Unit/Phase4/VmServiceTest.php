@@ -74,7 +74,7 @@ test('terminateVm は snippet 削除失敗時も VM 削除を継続する', func
     $snippetClient = Mockery::mock(SnippetClient::class);
     $snippetClient->shouldReceive('delete')
         ->once()
-        ->with('vm-330-user-data.yaml')
+        ->with(330)
         ->andThrow(new RuntimeException('snippet delete failed'));
 
     $snippetFactory = Mockery::mock(SnippetClientFactory::class);

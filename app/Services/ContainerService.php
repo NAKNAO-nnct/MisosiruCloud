@@ -249,6 +249,26 @@ class ContainerService
         }
 
         $this->nomadApi->namespace()->createNamespace($namespace, "Tenant namespace: {$namespace}");
+        $this->nomadApi->quota()->createQuota($this->buildNamespaceQuotaSpec($namespace));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildNamespaceQuotaSpec(string $namespace): array
+    {
+        return [
+            'Name' => $namespace,
+            'Description' => "Tenant quota for {$namespace}",
+            'Limits' => [[
+                'Region' => '*',
+                'RegionLimit' => [[
+                    'Region' => '*',
+                    'Namespace' => $namespace,
+                    'VariablesLimit' => 0,
+                ]],
+            ]],
+        ];
     }
 
     private function buildJobId(TenantData $tenant, string $name): string

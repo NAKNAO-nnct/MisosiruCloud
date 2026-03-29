@@ -706,42 +706,86 @@ certbot certonly \
   -d "example.com"
 ```
 
-### 6.5.5 CoreDNS (キャッシュ/フォワーダ)
+### 6.5.5 CoreDNS (キャッシュ/フォワーダ + ローカルオーバーライド)
 
-CoreDNS は **キャッシュ兼フォワーダ** として機能する。
-内部サービスのドメイン解決は外部 DNS プロバイダ (さくら DNS) に委任されており、
-CoreDNS は独自ゾーンを持たない。
+CoreDNS は **キャッシュ兼フォワーダ** として機能し、加えて **`file` プラグイン** でローカルオーバーライドゾーンを権威的にホストする。
 
 | 項目 | 値 |
 |------|---|
 | ソフトウェア | CoreDNS |
 | 起動方式 | Docker コンテナ (mgmt-docker VM 上) |
 | リッスンIP | 172.26.26.10:53 (管理NW) |
-| 役割 | キャッシュ + フォワーダ (+ オプショナルのスプリットホライズン) |
+| 役割 | キャッシュ + フォワーダ + ローカルオーバーライド (スプリットホライズン) |
 | フォワーダ | 8.8.8.8 / 8.8.4.4 |
 
-**CoreDNS 設定 (Corefile):**
+#### 動作モード
+
+1. **フォワーダ:** `infra.example.com` 等の外部 DNS プロバイダにプライベート IP で登録済みのドメインは、
+   8.8.8.8 に転送するだけで正しくプライベート IP に解決される。
+2. **ローカルオーバーライド:** `example.com` 配下などで、外部からは VPS Global IP / ローカルからはプライベート IP
+   を返したいドメインは、CoreDNS の `file` プラグインで権威応答する。
+3. **キャッシュ:** 上記いずれの結果も 300 秒キャッシュ。
+
+#### CoreDNS 設定 (Corefile)
+
+Corefile は **管理パネルの `LocalDnsProvider`** が自動生成する。初期状態はフォワーダのみ。
 
 ```
+# /etc/coredns/Corefile (LocalDnsProvider が自動生成)
+
+# ---- ローカルオーバーライドゾーン (自動生成ブロック) ----
+# 管理画面で local provider のレコードを登録すると、
+# 対象ドメインごとに以下のようなブロックが自動追加される:
+#
+# example.com:53 {
+#     file /etc/coredns/zones/db.example.com
+#     log
+# }
+
+# ---- デフォルト (フォワーダ) ----
 .:53 {
-    hosts /etc/coredns/override.hosts {
-        fallthrough
-    }
     forward . 8.8.8.8 8.8.4.4
     cache 300
     log
+    errors
 }
 ```
 
-**override.hosts (スプリットホライズン — 必要な場合のみ):**
+**ゾーンファイル例 (/etc/coredns/zones/db.example.com):**
 ```
-# 例: グローバルドメインを内部IPに上書きしたい場合
-# 172.26.26.10  registry.example.com
+$ORIGIN example.com.
+@   IN SOA ns.local. admin.local. (
+        2026032901  ; serial (YYYYMMDDnn)
+        3600        ; refresh
+        600         ; retry
+        86400       ; expire
+        300 )       ; minimum TTL
+;
+; ローカルオーバーライド (管理画面から登録)
+registry    300  IN  A  172.26.26.10
 ```
 
-> **ポイント:** `infra.example.com` のレコードは外部 DNS プロバイダに実 A レコードとして登録済みのため、
-> CoreDNS がフォワーダとして `8.8.8.8` に転送するだけで正しくプライベート IP に解決される。
-> `.internal` ゾーン管理は不要になり、CoreDNS の役割が大幅に簡素化される。
+#### レコード管理フロー
+
+```
+[管理画面: DNS レコード CRUD]
+    │
+    ▼
+[DnsService: dns_records テーブルに保存]
+    │
+    ├─ provider=cloudflare → Cloudflare API 呼び出し
+    ├─ provider=sakura     → さくら DNS API 呼び出し
+    └─ provider=local      → LocalDnsProvider
+                                │
+                                ├─ ゾーンファイル再生成 (/etc/coredns/zones/db.{domain})
+                                ├─ Corefile 再生成
+                                └─ CoreDNS に SIGHUP 送信 (graceful reload)
+```
+
+> **ポイント:**
+> - `infra.example.com` のレコードは外部 DNS プロバイダに実 A レコードとして登録済みのため、ローカルオーバーライド不要。
+> - ローカルオーバーライドが必要なのは `example.com` 配下でローカルアクセス時にプライベート IP を返したいケースのみ。
+> - ゾーンファイルの `file` プラグインは `reload` ディレクティブ不要（SIGHUP で即時リロード）。
 
 ---
 

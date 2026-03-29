@@ -22,6 +22,9 @@
 
                 @if ($authUser?->isAdmin())
                     <flux:navlist.group expandable heading="管理">
+                        <flux:navlist.item icon="users" :href="route('users.index')" :current="request()->routeIs('users.*')">
+                            ユーザ管理
+                        </flux:navlist.item>
                         <flux:navlist.item icon="building-2" :href="route('tenants.index')" :current="request()->routeIs('tenants.*')">
                             テナント管理
                         </flux:navlist.item>

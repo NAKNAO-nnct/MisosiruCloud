@@ -1837,39 +1837,266 @@ LOG_LEVEL=info
 `.internal` 等の非公開 TLD は **Let's Encrypt 証明書を取得できない** ため使用しない。
 すべてのサービスに実ドメインを割り当て、DNS-01 チャレンジで証明書を発行する。
 
-DNS を **グローバル用** (`example.com` — Cloudflare) と **内部インフラ用** (`infra.example.com` — さくらのクラウド DNS 等) に分離する。
-CoreDNS はキャッシュ/フォワーダとして動作し、独自ゾーンは持たない。
+DNS を **グローバル用** と **内部インフラ用** の2つのゾーンに分離し、それぞれ異なるプロバイダで管理する。
+加えて、ローカルネットワークからのアクセス時に **同一ドメインをローカル IP で解決する**（スプリットホライズン）ために、
+CoreDNS 上で **ローカルオーバーライドゾーン** を権威的にホストする。
 
-### 10.2 ユースケース
-
-| ユースケース | ドメイン例 | 解決先 | DNS プロバイダ |
-|------------|----------|--------|--------------|
-| 内部サービス参照 | `s3.infra.example.com` | 172.26.26.10 | さくら DNS |
-| レジストリアクセス | `registry.infra.example.com` | 172.26.26.10 | さくら DNS |
-| CaaS コンテナ (ワイルドカード) | `myapp.containers.example.com` | VPS Global IP | Cloudflare |
-| スニペット API | `snippet-pve1.infra.example.com` | 172.26.26.11 | さくら DNS |
-| 外部ドメイン | `google.com` | 8.8.8.8 へ転送 | (パブリック) |
-
-### 10.3 レコード管理
-
-内部インフラゾーン (`infra.example.com`) のレコードは **外部 DNS プロバイダの API** で管理する。
-mgmt-app の管理画面からレコードを編集する場合、DNS プロバイダ API を呼び出す。
+### 10.2 アーキテクチャ概要
 
 ```
-# レコード変更フロー
-[管理画面: DNS 管理画面]
-    │  レコード追加/変更/削除
-    ▼
-[mgmt-app: DNS プロバイダ API 呼び出し]
-    │  さくら DNS API / Cloudflare API
-    ▼
-[DNS プロバイダ: レコード反映]
-    │  TTL 経過後にグローバルに伝播
-    ▼
-[CoreDNS: キャッシュ TTL 経過後に新しいレコードを取得]
+┌─────────────────────────────────────────────────────────────────────────┐
+│              DNS 管理画面 (admin/dns)                                     │
+│   ゾーン一覧 → レコード一覧 → レコード追加/編集/削除                        │
+└───────────────┬─────────────────────────────────────────────────────────┘
+                │ DnsService
+                ▼
+    ┌─────────────────────┐
+    │    dns_zones (DB)    │  ← ゾーンごとに provider を指定
+    │    dns_records (DB)  │  ← レコードを統一的に管理
+    └──────────┬──────────┘
+               │
+    ┌──────────┼──────────────────────────────┐
+    │          │                              │
+    ▼          ▼                              ▼
+┌────────┐ ┌──────────┐              ┌──────────────────┐
+│ local  │ │ sakura   │              │ cloudflare       │
+│ driver │ │ driver   │              │ driver           │
+└───┬────┘ └────┬─────┘              └──────┬───────────┘
+    │           │                           │
+    ▼           ▼                           ▼
+  CoreDNS   さくら DNS API           Cloudflare API
+  file       (HTTP API)              (HTTP API)
+  plugin
 ```
 
-### 10.4 SSL/TLS 証明書 (Let's Encrypt)
+### 10.3 DNS ゾーン設計
+
+| ゾーン | provider | 用途 | レコード管理方法 |
+|--------|----------|------|---------------|
+| `example.com` | `cloudflare` | 公開サービス・CaaS ワイルドカード | Cloudflare API |
+| `infra.example.com` | `sakura` | 内部インフラサービス (プライベート IP) | さくらのクラウド DNS API |
+| `local.override` | `local` | スプリットホライズン用ローカルオーバーライド | CoreDNS `file` プラグイン (ゾーンファイル生成) |
+
+> **NS 委任:** Cloudflare 側で `infra.example.com` の NS レコードをさくら DNS に向ける。
+> **ローカルオーバーライド:** `local.override` は仮想ゾーン名。実際には複数の実ドメインに対する権威レスポンスを
+> CoreDNS の `file` プラグインで返す。外部からのアクセスには影響しない。
+
+### 10.4 スプリットホライズン設計
+
+#### 問題
+同一ドメイン（例: `registry.example.com`）に対して、外部からは VPS Global IP、
+ローカルネットワークからは `172.26.26.10` を返したい。
+
+#### 解決策
+CoreDNS 上でドメインごとに `file` プラグインでローカルゾーンファイルをホストし、
+マッチしないドメインのみ外部フォワーダ (8.8.8.8) に転送する。
+
+```
+# CoreDNS 解決フロー (内部クライアント)
+
+クエリ: registry.example.com
+         │
+         ▼
+CoreDNS → ① ローカルゾーンファイルに一致?
+         │      YES → 172.26.26.10 を返却 (権威応答)
+         │      NO  → ② forward → 8.8.8.8 → Cloudflare の A レコード返却
+         ▼
+内部クライアントはローカル IP でアクセス
+```
+
+```
+# 外部クライアントからの解決フロー (CoreDNS を経由しない)
+
+クエリ: registry.example.com
+         │
+         ▼
+パブリック DNS (Cloudflare) → VPS Global IP を返却
+```
+
+### 10.5 ユースケース
+
+| ユースケース | ドメイン例 | 外部からの解決先 | ローカルからの解決先 | DNS プロバイダ |
+|------------|----------|-------------|----------------|--------------|
+| 内部サービス参照 | `s3.infra.example.com` | 172.26.26.10 (到達不可) | 172.26.26.10 | さくら DNS |
+| レジストリ (ローカルオーバーライド) | `registry.example.com` | VPS Global IP | 172.26.26.10 | Cloudflare + local |
+| CaaS コンテナ | `myapp.containers.example.com` | VPS Global IP | VPS Global IP | Cloudflare |
+| スニペット API | `snippet-pve1.infra.example.com` | 172.26.26.11 (到達不可) | 172.26.26.11 | さくら DNS |
+| 外部ドメイン | `google.com` | 8.8.8.8 へ転送 | 8.8.8.8 へ転送 | (パブリック) |
+
+### 10.6 レコード管理アーキテクチャ
+
+#### 10.6.1 DnsProvider インターフェース
+
+```php
+namespace App\Lib\Dns;
+
+interface DnsProviderInterface
+{
+    /** @return DnsRecordDto[] */
+    public function listRecords(string $zoneName): array;
+
+    public function createRecord(string $zoneName, DnsRecordDto $record): DnsRecordDto;
+
+    public function updateRecord(string $zoneName, string $recordId, DnsRecordDto $record): DnsRecordDto;
+
+    public function deleteRecord(string $zoneName, string $recordId): void;
+}
+```
+
+#### 10.6.2 プロバイダ実装
+
+| クラス | provider 値 | 概要 |
+|--------|-----------|------|
+| `App\Lib\Dns\CloudflareDnsProvider` | `cloudflare` | Cloudflare API v4 (`/zones/{zone_id}/dns_records`) |
+| `App\Lib\Dns\SakuraDnsProvider` | `sakura` | さくらのクラウド DNS API |
+| `App\Lib\Dns\LocalDnsProvider` | `local` | CoreDNS ゾーンファイル生成 + SIGHUP リロード |
+
+#### 10.6.3 LocalDnsProvider の動作
+
+`local` プロバイダは DB のレコードから **ドメインごとの CoreDNS ゾーンファイル** を生成する。
+
+```
+# レコード変更フロー (local provider)
+[管理画面: DNS レコード CRUD]
+    │
+    ▼
+[DnsService: DB に保存 + LocalDnsProvider 呼び出し]
+    │
+    ▼
+[LocalDnsProvider]
+    │
+    ├─ 1. dns_records から当該ゾーンのレコードを取得
+    ├─ 2. ドメインごとにゾーンファイルを生成
+    │     /etc/coredns/zones/db.example.com
+    │     /etc/coredns/zones/db.containers.example.com
+    ├─ 3. Corefile を再生成（ゾーンブロック追加/削除）
+    └─ 4. CoreDNS コンテナに SIGHUP 送信 (graceful reload)
+```
+
+#### 10.6.4 ゾーンファイル生成例
+
+`local` プロバイダでオーバーライドしたいレコード:
+
+```
+; /etc/coredns/zones/db.example.com
+$ORIGIN example.com.
+@   IN SOA ns.local. admin.local. (
+        2026032901  ; serial (YYYYMMDDnn)
+        3600        ; refresh
+        600         ; retry
+        86400       ; expire
+        300 )       ; minimum TTL
+;
+registry    300  IN  A  172.26.26.10
+mgmt        300  IN  A  172.26.26.10
+```
+
+#### 10.6.5 Corefile 動的生成
+
+`LocalDnsProvider` は、ローカルオーバーライド対象のドメインに応じて Corefile を動的に生成する。
+
+```
+# /etc/coredns/Corefile (自動生成)
+
+# ローカルオーバーライドゾーン (dns_records の local provider レコードから自動生成)
+example.com:53 {
+    file /etc/coredns/zones/db.example.com
+    log
+}
+
+# 上記以外は外部フォワード
+.:53 {
+    forward . 8.8.8.8 8.8.4.4
+    cache 300
+    log
+    errors
+}
+```
+
+> **ポイント:** ドメインブロック (`example.com:53`) が存在する場合、CoreDNS はそのドメインのクエリに対して
+> `file` プラグインで権威応答する。ゾーンファイルにないサブドメインのクエリは NXDOMAIN を返す**のではなく**、
+> `fallthrough` がないため `.:53` ブロックには落ちない点に注意。
+>
+> そのため、ローカルオーバーライドするドメインの **全レコード** をゾーンファイルに含めるか、
+> もしくは `file` ブロックに `fallthrough` を追加して外部フォワードにフォールバックさせる必要がある。
+>
+> **推奨:** ローカルオーバーライドは少数の明示的なレコードのみ対象とし、
+> ゾーンファイルには必要最小限のレコードのみを記載する。`fallthrough` は使わない
+> （意図しない外部転送を防ぐため）。
+
+### 10.7 DnsService 設計
+
+```php
+namespace App\Services;
+
+class DnsService
+{
+    public function __construct(
+        private DnsZoneRepository $zoneRepository,
+        private DnsRecordRepository $recordRepository,
+        private DnsProviderFactory $providerFactory,
+    ) {}
+
+    /**
+     * レコード追加: DB に保存 → provider に反映
+     */
+    public function createRecord(int $zoneId, array $attributes): DnsRecordData
+    {
+        $zone = $this->zoneRepository->findByIdOrFail($zoneId);
+        $record = $this->recordRepository->create($zoneId, $attributes);
+
+        $provider = $this->providerFactory->make($zone->getProvider());
+        $externalRecord = $provider->createRecord($zone->getName(), $record->toDto());
+
+        // 外部 provider が返す ID (Cloudflare record ID 等) を保存
+        if ($externalRecord->externalId) {
+            $this->recordRepository->update($record->getId(), [
+                'external_id' => $externalRecord->externalId,
+            ]);
+        }
+
+        return $record;
+    }
+
+    /**
+     * ローカルオーバーライドゾーンの全体再生成
+     * LocalDnsProvider 使用ゾーンのみ対象
+     */
+    public function regenerateLocalZones(): void
+    {
+        $localZones = $this->zoneRepository->findByProvider('local');
+
+        foreach ($localZones as $zone) {
+            $records = $this->recordRepository->findByZoneId($zone->getId());
+            $provider = $this->providerFactory->make('local');
+            $provider->regenerateZoneFile($zone->getName(), $records);
+        }
+
+        $provider->regenerateCorefile($localZones);
+        $provider->reloadCoreDns();
+    }
+}
+```
+
+### 10.8 レコード変更フロー
+
+```
+# cloudflare / sakura provider
+[管理画面] → [DnsService] → [DB 保存] → [Provider API 呼び出し] → [DNS プロバイダに即時反映]
+                                                                        │
+                                                              TTL 経過後に伝播
+                                                                        │
+                                                              CoreDNS キャッシュ更新
+
+# local provider
+[管理画面] → [DnsService] → [DB 保存] → [LocalDnsProvider]
+                                            │
+                                            ├─ ゾーンファイル再生成
+                                            ├─ Corefile 再生成
+                                            └─ CoreDNS SIGHUP → 即時反映
+```
+
+### 10.9 SSL/TLS 証明書 (Let's Encrypt)
 
 DNS-01 チャレンジを使用し、すべての証明書を Let's Encrypt で取得する。
 

@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\User\CreateController as AdminUserCreate;
+use App\Http\Controllers\Admin\User\EditController as AdminUserEdit;
+use App\Http\Controllers\Admin\User\IndexController as AdminUserIndex;
+use App\Http\Controllers\Admin\User\StoreController as AdminUserStore;
+use App\Http\Controllers\Admin\User\UpdateController as AdminUserUpdate;
 use App\Http\Controllers\Api\ContainerStatusController as ApiContainerStatus;
 use App\Http\Controllers\Api\DbaasStatusController as ApiDbaasStatus;
 use App\Http\Controllers\Api\NodeStatusController as ApiNodeStatus;
@@ -83,6 +88,14 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('dashboard', DashboardIndex::class)->name('dashboard');
 
     Route::middleware('admin')->prefix('admin')->group(function (): void {
+        Route::prefix('users')->name('users.')->group(function (): void {
+            Route::get('/', AdminUserIndex::class)->name('index');
+            Route::get('/create', AdminUserCreate::class)->name('create');
+            Route::post('/', AdminUserStore::class)->name('store');
+            Route::get('/{id}/edit', AdminUserEdit::class)->name('edit');
+            Route::put('/{id}', AdminUserUpdate::class)->name('update');
+        });
+
         Route::prefix('tenants')->name('tenants.')->group(function (): void {
             Route::get('/', TenantIndex::class)->name('index');
             Route::get('/create', TenantCreate::class)->name('create');
