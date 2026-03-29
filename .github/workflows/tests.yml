@@ -53,7 +53,7 @@ jobs:
           node-version-file: package.json
 
       - name: Install Node Dependencies
-        run: npm i
+        run: npm i && npm run build
 
       - name: Install Dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
