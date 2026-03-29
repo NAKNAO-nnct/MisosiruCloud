@@ -6,7 +6,8 @@
 実装コードを照合した結果、以下の差異が確認された。
 本ドキュメントは修正項目と対応方針をまとめる。
 
-調査日: 2026-03-29
+調査日: 2026-03-29  
+実装完了日: 2026-03-29
 
 ---
 
@@ -14,18 +15,18 @@
 
 | # | 分類 | 対象ファイル | 深刻度 | 状態 |
 |---|------|------------|--------|------|
-| 1 | リダイレクト先 | `app/Http/Controllers/Vm/StoreController.php` | 低 | - |
-| 2 | ジョブ引数の設計乖離 | `app/Jobs/ProvisionVmJob.php` / `app/Data/Vm/ProvisionVmCommand.php` | 低 | - |
-| 3 | `vm_metas` INSERT が非同期ジョブ内で実行される | `app/Services/VmService.php` | 中 | - |
-| 4 | network-config.yaml / meta-data.yaml 未生成 | `app/Services/VmService.php` | **高** | - |
-| 5 | `updateVmConfig` に NIC（net0/net1）設定なし | `app/Services/VmService.php` | **高** | - |
-| 6 | フォーム・Request・Command にネットワーク項目なし | `CreateVmRequest` / `ProvisionVmCommand` / `create.blade.php` | **高** | - |
-| 7 | プロビジョニングのステップ実行順序がドキュメントとずれている | `app/Services/VmService.php` | 中 | - |
-| 8 | `vm_metas` マイグレーション / Model にネットワークカラムがない | `database/migrations/` / `VmMeta.php` / `VmMetaData.php` | **高** | - |
-| 9 | Cloud-init user-data の内容がドキュメント対比で大幅に不足 | `app/Services/CloudInit/CloudInitBuilder.php` | **高** | - |
-| 10 | `VmStatus::Uploading` 追加に DB マイグレーション変更が必要 | `database/migrations/` / `VmStatus.php` | 中 | - |
-| 11 | `VmMetaData` / `VmDetailResponseData` / `VmMetaFactory` にネットワーク項目なし | `app/Data/Vm/` / `database/factories/` | 中 | - |
-| 12 | VM 詳細画面にネットワーク情報の表示がない | `resources/views/vms/show.blade.php` | 低 | - |
+| 1 | リダイレクト先 | `app/Http/Controllers/Vm/StoreController.php` | 低 | ✅ 完了 |
+| 2 | ジョブ引数の設計乖離 | `app/Jobs/ProvisionVmJob.php` / `app/Data/Vm/ProvisionVmCommand.php` | 低 | ✅ 完了 |
+| 3 | `vm_metas` INSERT が非同期ジョブ内で実行される | `app/Services/VmService.php` | 中 | ✅ 完了 |
+| 4 | network-config.yaml / meta-data.yaml 未生成 | `app/Services/VmService.php` | **高** | ✅ 完了 |
+| 5 | `updateVmConfig` に NIC（net0/net1）設定なし | `app/Services/VmService.php` | **高** | ✅ 完了 |
+| 6 | フォーム・Request・Command にネットワーク項目なし | `CreateVmRequest` / `ProvisionVmCommand` / `create.blade.php` | **高** | ✅ 完了 |
+| 7 | プロビジョニングのステップ実行順序がドキュメントとずれている | `app/Services/VmService.php` | 中 | ✅ 完了 |
+| 8 | `vm_metas` マイグレーション / Model にネットワークカラムがない | `database/migrations/` / `VmMeta.php` / `VmMetaData.php` | **高** | ✅ 完了 |
+| 9 | Cloud-init user-data の内容がドキュメント対比で大幅に不足 | `app/Services/CloudInit/CloudInitBuilder.php` | **高** | ✅ 完了 |
+| 10 | `VmStatus::Uploading` 追加に DB マイグレーション変更が必要 | `database/migrations/` / `VmStatus.php` | 中 | ✅ 完了 |
+| 11 | `VmMetaData` / `VmDetailResponseData` / `VmMetaFactory` にネットワーク項目なし | `app/Data/Vm/` / `database/factories/` | 中 | ✅ 完了 |
+| 12 | VM 詳細画面にネットワーク情報の表示がない | `resources/views/vms/show.blade.php` | 低 | ✅ 完了 |
 
 ---
 
@@ -906,82 +907,88 @@ public function definition(): array
 差異 8・10 はマイグレーション作業で、全修正の前提となるため最初に実施する。
 差異 4・5・6・9・11 は密接に関連しているため一括対応を推奨する。差異 1・2・3 はセットで対応する。
 
-### ステップ 0: 設計書の更新（差異 8）
+**✅ 全ステップ完了（2026-03-29）** — コミット: `implement vm-provisioning-fixes: steps 0-8`
+
+### ✅ ステップ 0: 設計書の更新（差異 8）
 
 対象ファイル:
 - `docs/database-design.md` — `vm_metas` テーブル定義に `ip_address` / `gateway` / `vnet_name` / `ssh_keys` カラムを追記
 
-### ステップ 1: マイグレーション作成（差異 8・10）
+### ✅ ステップ 1: マイグレーション作成（差異 8・10）
 
 対象ファイル:
-- `database/migrations/xxxx_add_network_columns_to_vm_metas_table.php` — 新規作成
+- `database/migrations/2026_03_29_144245_add_network_columns_to_vm_metas_table.php` — 作成・適用済み
   - `ip_address` / `gateway` / `vnet_name` / `ssh_keys` カラム追加
   - `provisioning_status` ENUM に `'uploading'` を追加
-- `app/Enums/VmStatus.php` — `Uploading` ケース追加
-- `app/Models/VmMeta.php` — `#[Fillable]` にネットワークカラム追加
+- `app/Enums/VmStatus.php` — `Uploading` ケース追加済み
+- `app/Models/VmMeta.php` — `#[Fillable]` にネットワークカラム追加済み
 
-### ステップ 2: Data / Factory の更新（差異 11）
-
-対象ファイル:
-- `app/Data/Vm/VmMetaData.php` — プロパティ・`of()`・`make()`・ゲッター・`toArray()` にネットワーク項目追加
-- `database/factories/VmMetaFactory.php` — `definition()` にネットワーク項目のデフォルト値追加
-
-### ステップ 3: ネットワーク入力項目の追加（差異 6）
+### ✅ ステップ 2: Data / Factory の更新（差異 11）
 
 対象ファイル:
-- `app/Http/Requests/Vm/CreateVmRequest.php` — バリデーションルール追加
-- `app/Data/Vm/ProvisionVmCommand.php` — プロパティ・ゲッター・`make()`・`toArray()` 追加
-- `resources/views/vms/create.blade.php` — フォームフィールド追加・`$prefill` 更新
+- `app/Data/Vm/VmMetaData.php` — プロパティ・`of()`・`make()`・ゲッター・`toArray()` にネットワーク項目追加済み
+- `database/factories/VmMetaFactory.php` — `definition()` にネットワーク項目のデフォルト値追加済み
 
-### ステップ 4: CloudInitBuilder の実装（差異 4・9）
+### ✅ ステップ 3: ネットワーク入力項目の追加（差異 6）
 
 対象ファイル:
-- `app/Services/CloudInit/CloudInitBuilder.php` — 新規作成
-  - `buildUserData(array $config)` — hostname / fqdn / SSH 鍵 / パッケージ / DNS リゾルバ / タイムゾーン
+- `app/Http/Requests/Vm/CreateVmRequest.php` — バリデーションルール追加済み
+- `app/Data/Vm/ProvisionVmCommand.php` — プロパティ・ゲッター・`make()`・`toArray()` 追加済み
+- `resources/views/vms/create.blade.php` — フォームフィールド追加・`$prefill` 更新済み
+
+### ✅ ステップ 4: CloudInitBuilder の実装（差異 4・9）
+
+対象ファイル:
+- `app/Services/CloudInit/CloudInitBuilder.php` — 完全書き換え済み
+  - `buildUserData(array $config)` — hostname / fqdn / SSH 鍵 / パッケージ / DNS リゾルバ / タイムゾーン / runcmd
   - `buildNetworkConfig(string $ipCidr, string $gateway, ?string $sharedIp)` — Netplan v2 YAML
   - `buildMetaData(int $vmId, string $hostname)` — instance-id / local-hostname
-- `tests/Unit/Services/CloudInit/CloudInitBuilderTest.php` — 単体テスト新規作成
+  - コンストラクタに `$dnsResolvers` 注入（Unit テスト対応、`AppServiceProvider` で config から DI）
+- `tests/Unit/Phase4/CloudInitBuilderTest.php` — 新 API に合わせて書き換え済み（10件パス）
 
-### ステップ 5: NIC 設定・cicustom 完全版・スニペット3ファイル対応（差異 5・7）
+### ✅ ステップ 5: NIC 設定・cicustom 完全版・スニペット3ファイル対応（差異 5・7）
 
 対象ファイル:
 - `app/Services/VmService.php`
-  - `uploadVmSnippet()` へ `$networkConfig` / `$metaData` を渡すよう修正
-  - `updateVmConfig` に `net0` / `net1` / `cicustom` 完全版を設定
-  - スニペット保存を `cloneVm` より前に移動
+  - `uploadVmSnippet()` へ `$networkConfig` / `$metaData` を渡すよう修正済み
+  - `updateVmConfig` に `net0` / `net1` / `cicustom` 完全版（3ファイル）を設定済み
+  - スニペット保存を `cloneVm` より前（`Uploading` ステータス）に移動済み
 
-### ステップ 6: DB INSERT 同期化・責務分離（差異 3）
-
-対象ファイル:
-- `app/Services/VmService.php` — `createVmMeta()` 同期メソッド追加、`executeProvisioning()` としてジョブ向け処理を切り出し
-- `app/Jobs/ProvisionVmJob.php` — 引数を `int $vmMetaId` に変更
-
-### ステップ 7: リダイレクト先修正・ジョブ引数整合（差異 1・2）
+### ✅ ステップ 6: DB INSERT 同期化・責務分離（差異 3）
 
 対象ファイル:
-- `app/Http/Controllers/Vm/StoreController.php` — `vms.show` へのリダイレクト、`createVmMeta()` 呼び出しに変更
+- `app/Services/VmService.php` — `createVmMeta()` 同期メソッド追加、`provisionVm(VmMetaData, array)` としてジョブ向け処理を再実装済み
+- `app/Jobs/ProvisionVmJob.php` — 引数を `int $vmMetaId` + `array $templateParams` に変更済み
 
-### ステップ 8: VM 詳細画面のネットワーク情報表示（差異 12）
+### ✅ ステップ 7: リダイレクト先修正・ジョブ引数整合（差異 1・2）
 
 対象ファイル:
-- `resources/views/vms/show.blade.php` — VNet / 内部 IP / ゲートウェイ / 共有 IP を表示
-- ポーリング判定に `'uploading'` ステータスを追加
+- `app/Http/Controllers/Vm/StoreController.php` — `vms.show` へのリダイレクト、`createVmMeta()` 呼び出しに変更済み
+
+### ✅ ステップ 8: VM 詳細画面のネットワーク情報表示（差異 12）
+
+対象ファイル:
+- `resources/views/vms/show.blade.php` — VNet / 内部 IP / ゲートウェイ / 共有 IP を表示済み
+- ポーリング判定に `'uploading'` ステータスを追加済み
 
 ---
 
-## テスト計画
+## テスト結果
 
-各ステップ完了後に以下のテストを実行・更新する。
+| テストファイル | 対象差異 | 結果 |
+|--------------|---------|------|
+| `tests/Unit/Phase4/CloudInitBuilderTest.php` | 4・9 | ✅ 10件パス |
+| `tests/Unit/Phase5/DbaasCloudInitTemplatesTest.php` | 4・9 | ✅ 3件パス（runcmd 対応含む） |
+| `tests/Feature/Phase4/VmManagementTest.php` | 1・3・6 | ✅ パス |
+| `tests/Feature/Phase9/VmProvisioningSnippetUploadTest.php` | 4・5・7 | ✅ パス |
+| `tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php` | 2・3・6・8・10・11・12 | ✅ パス |
+| `tests/Unit/Phase11/ProvisionJobsTest.php` | 2・3 | ✅ 4件パス |
+| `tests/Unit/Phase11/ProvisioningQueueConfigTest.php` | 2 | ✅ パス |
 
-| テストファイル | 対象差異 | 確認内容 |
-|--------------|---------|---------|
-| `tests/Feature/Vm/StoreTest.php` | 1・3・6 | バリデーション（ネットワーク項目含む）・リダイレクト先・`vm_metas` 同期 INSERT |
-| `tests/Feature/Vm/VmProvisioningFlowTest.php` | 2・3・4・5・7・8・10 | スニペット保存順序・NIC 設定・Cloud-init 3ファイル・ネットワーク情報保存 |
-| `tests/Unit/Services/VmServiceTest.php` | 4・5・7・9 | `buildUserData` 全内容 / `updateVmConfig` 引数 / 実行順序 |
-| `tests/Unit/Services/CloudInit/CloudInitBuilderTest.php` | 4・9 | user-data 全項目（SSH鍵・パッケージ・DNS）/ network-config / meta-data（新規） |
-| `tests/Unit/Data/VmMetaDataTest.php` | 11 | ネットワーク項目の `of()` / `make()` / ゲッター / `toArray()` |
-| `tests/Feature/Vm/VmShowTest.php` | 12 | 詳細画面にネットワーク情報が表示されること |
+> **備考:** `tests/Unit/Phase6/ContainerServiceTest` / `tests/Feature/Phase6/ContainerManagementTest` の 3 件失敗は
+> 今回の変更と無関係な既存の問題（Nomad API フェイク未設定、`env_vars` 型不一致）であることを `git stash` で確認済み。
 
 ```bash
-php artisan test --compact --filter="VmService|StoreTest|Provisioning|CloudInit|VmMetaData|VmShow"
+php artisan test --compact --filter="VmManagement|VmProvisioning|CloudInitBuilder|DbaasCloudInit|ProvisionJobs|ProvisioningQueue"
+# → 30件パス、警告3件（deprecation）、失敗0件
 ```
