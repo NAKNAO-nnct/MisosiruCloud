@@ -5,14 +5,11 @@ on:
     branches:
       - develop
       - main
-      - master
-      - workos
   pull_request:
     branches:
       - develop
       - main
-      - master
-      - workos
+  workflow_dispatch:
 
 jobs:
   ci:
@@ -58,3 +55,58 @@ jobs:
 
       - name: Run Tests
         run: ./vendor/bin/pest
+
+  build:
+    needs: ci
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: app
+            context: .
+            dockerfile: ./docker/php/Dockerfile.prod
+          - name: s3-proxy
+            context: ./s3-proxy
+            dockerfile: ./s3-proxy/Dockerfile
+          - name: snippet-api
+            context: ./snippet-api
+            dockerfile: ./snippet-api/Dockerfile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

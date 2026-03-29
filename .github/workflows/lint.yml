@@ -5,14 +5,11 @@ on:
     branches:
       - develop
       - main
-      - master
-      - workos
   pull_request:
     branches:
       - develop
       - main
-      - master
-      - workos
+  workflow_dispatch:
 
 permissions:
   contents: write
