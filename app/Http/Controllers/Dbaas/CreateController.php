@@ -23,9 +23,14 @@ class CreateController extends Controller
     {
         $formOptions = $this->vmService->getFormOptions();
 
+        $dbVersions = collect(DatabaseType::cases())
+            ->mapWithKeys(fn (DatabaseType $type) => [$type->value => $type->versions()])
+            ->all();
+
         return view('dbaas.create', array_merge([
             'tenants' => $this->tenantRepository->all(),
             'dbTypes' => DatabaseType::cases(),
+            'dbVersions' => $dbVersions,
             'templates' => $this->vmService->listAllVms(),
         ], $formOptions));
     }

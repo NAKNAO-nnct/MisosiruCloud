@@ -1,5 +1,5 @@
 <x-layouts::app :title="__('DBaaS 作成')">
-    <div class="flex max-w-3xl flex-col gap-6">
+    <div class="flex max-w-3xl flex-col gap-6" x-data="dbaasForm()">
         <div class="flex items-center gap-2">
             <flux:button href="{{ route('dbaas.index') }}" variant="ghost" size="sm" icon="arrow-left">一覧へ戻る</flux:button>
             <flux:heading size="xl">DBaaS 作成</flux:heading>
@@ -25,7 +25,8 @@
 
             <flux:field>
                 <flux:label>DB種別</flux:label>
-                <flux:select name="db_type" required>
+                <flux:select name="db_type" required @change="updateVersions()" x-model="selectedDbType">
+                    <flux:select.option value="">-- 選択してください --</flux:select.option>
                     @foreach ($dbTypes as $dbType)
                         <flux:select.option value="{{ $dbType->value }}" :selected="old('db_type') === $dbType->value">{{ $dbType->value }}</flux:select.option>
                     @endforeach
@@ -35,7 +36,12 @@
 
             <flux:field>
                 <flux:label>DBバージョン</flux:label>
-                <flux:input name="db_version" value="{{ old('db_version', '8.4') }}" required />
+                <select name="db_version" required x-model="selectedDbVersion" class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                    <option value="">-- DB種別を先に選択してください --</option>
+                    <template x-for="version in availableVersions" :key="version">
+                        <option :value="version" x-text="version"></option>
+                    </template>
+                </select>
                 <flux:error name="db_version" />
             </flux:field>
 
@@ -99,5 +105,33 @@
                 <flux:button href="{{ route('dbaas.index') }}" variant="ghost">キャンセル</flux:button>
             </div>
         </form>
+
+        <script>
+            function dbaasForm() {
+                return {
+                    selectedDbType: '{{ old('db_type', '') }}',
+                    selectedDbVersion: '{{ old('db_version', '') }}',
+                    availableVersions: [],
+                    dbVersions: @json($dbVersions),
+
+                    init() {
+                        this.updateVersions();
+                    },
+
+                    updateVersions() {
+                        if (this.selectedDbType && this.dbVersions[this.selectedDbType]) {
+                            this.availableVersions = this.dbVersions[this.selectedDbType];
+                            // 前の値が無効になった場合は先頭を選択
+                            if (!this.availableVersions.includes(this.selectedDbVersion)) {
+                                this.selectedDbVersion = this.availableVersions[0] || '';
+                            }
+                        } else {
+                            this.availableVersions = [];
+                            this.selectedDbVersion = '';
+                        }
+                    }
+                };
+            }
+        </script>
     </div>
 </x-layouts::app>
