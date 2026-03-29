@@ -1,0 +1,35 @@
+hostname: registry.infra.example.com
+
+http:
+  port: 8080
+
+https:
+  port: 8443
+  certificate: /etc/harbor/certs/fullchain.pem
+  private_key: /etc/harbor/certs/privkey.pem
+
+harbor_admin_password: change-me
+
+database:
+  type: mysql
+  host: mgmt-db
+  port: 3306
+  username: misosiru
+  password: change-me
+  core_database: registry
+
+data_volume: /storage
+
+log:
+  level: info
+  local:
+    location: /var/log/harbor
+
+jobservice:
+  max_job_workers: 10
+
+notification:
+  webhook_job_max_retry: 10
+
+chart:
+  absolute_url: disabled

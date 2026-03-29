@@ -2,6 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\Dns\RecordDestroy as AdminDnsRecordDestroy;
+use App\Http\Controllers\Admin\Dns\RecordIndex as AdminDnsRecordIndex;
+use App\Http\Controllers\Admin\Dns\RecordStore as AdminDnsRecordStore;
+use App\Http\Controllers\Admin\Dns\RecordUpdate as AdminDnsRecordUpdate;
+use App\Http\Controllers\Admin\Dns\Reload as AdminDnsReload;
+use App\Http\Controllers\Admin\Dns\ZoneDestroy as AdminDnsZoneDestroy;
+use App\Http\Controllers\Admin\Dns\ZoneIndex as AdminDnsZoneIndex;
+use App\Http\Controllers\Admin\Dns\ZoneStore as AdminDnsZoneStore;
+use App\Http\Controllers\Admin\Dns\ZoneSync as AdminDnsZoneSync;
+use App\Http\Controllers\Admin\Dns\ZoneUpdate as AdminDnsZoneUpdate;
 use App\Http\Controllers\Admin\User\CreateController as AdminUserCreate;
 use App\Http\Controllers\Admin\User\EditController as AdminUserEdit;
 use App\Http\Controllers\Admin\User\IndexController as AdminUserIndex;
@@ -33,10 +43,6 @@ use App\Http\Controllers\Dbaas\StartController as DbaasStart;
 use App\Http\Controllers\Dbaas\StopController as DbaasStop;
 use App\Http\Controllers\Dbaas\StoreController as DbaasStore;
 use App\Http\Controllers\Dbaas\UpgradeController as DbaasUpgrade;
-use App\Http\Controllers\Dns\DestroyController as DnsDestroy;
-use App\Http\Controllers\Dns\IndexController as DnsIndex;
-use App\Http\Controllers\Dns\StoreController as DnsStore;
-use App\Http\Controllers\Dns\UpdateController as DnsUpdate;
 use App\Http\Controllers\Network\CreateController as NetworkCreate;
 use App\Http\Controllers\Network\DestroyController as NetworkDestroy;
 use App\Http\Controllers\Network\IndexController as NetworkIndex;
@@ -189,11 +195,19 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
             Route::delete('/{tenant}', NetworkDestroy::class)->name('destroy');
         });
 
-        Route::prefix('dns')->name('dns.')->group(function (): void {
-            Route::get('/', DnsIndex::class)->name('index');
-            Route::post('/', DnsStore::class)->name('store');
-            Route::put('/{recordId}', DnsUpdate::class)->name('update');
-            Route::delete('/{recordId}', DnsDestroy::class)->name('destroy');
+        Route::prefix('dns-zones')->name('dns-zones.')->group(function (): void {
+            Route::get('/', AdminDnsZoneIndex::class)->name('index');
+            Route::post('/', AdminDnsZoneStore::class)->name('store');
+            Route::put('/{zoneId}', AdminDnsZoneUpdate::class)->name('update');
+            Route::delete('/{zoneId}', AdminDnsZoneDestroy::class)->name('destroy');
+
+            Route::post('/reload', AdminDnsReload::class)->name('reload');
+            Route::post('/{zoneId}/sync', AdminDnsZoneSync::class)->name('sync');
+
+            Route::get('/{zoneId}/records', AdminDnsRecordIndex::class)->name('records.index');
+            Route::post('/{zoneId}/records', AdminDnsRecordStore::class)->name('records.store');
+            Route::put('/{zoneId}/records/{recordId}', AdminDnsRecordUpdate::class)->name('records.update');
+            Route::delete('/{zoneId}/records/{recordId}', AdminDnsRecordDestroy::class)->name('records.destroy');
         });
     });
 

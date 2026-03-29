@@ -1,0 +1,137 @@
+services:
+  mgmt-app:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    depends_on:
+      mgmt-db:
+        condition: service_healthy
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_APP_HTTP_PORT:-80}:80
+      - ${COMPOSE_APP_HTTPS_PORT:-443}:443
+    volumes:
+      - ./storage:/var/www/storage
+      - certs:/etc/letsencrypt
+
+  mgmt-queue:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile.prod
+    restart: unless-stopped
+    command: php artisan queue:work provisioning --queue=provisioning --timeout=600 --tries=1
+    env_file:
+      - .env.prod
+    depends_on:
+      mgmt-db:
+        condition: service_healthy
+    networks:
+      - mgmt-net
+    volumes:
+      - ./storage:/var/www/storage
+
+  mgmt-db:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: mysqld --character-set-server=utf8mb4
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-misosiru_cloud}
+      MYSQL_USER: ${DB_USERNAME:-misosiru}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-change-me}
+      TZ: Asia/Tokyo
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_DB_PORT:-3306}:3306
+    volumes:
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_PASSWORD:-change-me}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  s3-proxy:
+    build:
+      context: ./s3-proxy
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      S3_BACKEND_ENDPOINT: ${S3_BACKEND_ENDPOINT}
+      S3_BACKEND_REGION: ${S3_BACKEND_REGION}
+      S3_BACKEND_ACCESS_KEY: ${S3_BACKEND_ACCESS_KEY}
+      S3_BACKEND_SECRET_KEY: ${S3_BACKEND_SECRET_KEY}
+      DB_HOST: mgmt-db
+      DB_PORT: 3306
+      DB_USER: ${DB_USERNAME:-misosiru}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me}
+      DB_NAME: ${DB_DATABASE:-misosiru_cloud}
+      LISTEN_ADDR: 0.0.0.0
+      LISTEN_PORT: 9000
+      CACHE_REFRESH_INTERVAL: 10s
+      LOG_LEVEL: info
+    depends_on:
+      mgmt-db:
+        condition: service_healthy
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_S3_PROXY_PORT:-9000}:9000
+
+  dns:
+    build:
+      context: .
+      dockerfile: ./docker/dns/Dockerfile
+    restart: unless-stopped
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_DNS_PORT:-53}:53/tcp
+      - ${COMPOSE_DNS_PORT:-53}:53/udp
+    volumes:
+      - ./docker/dns/Corefile:/etc/coredns/Corefile:ro
+      - ./docker/dns/zones:/etc/coredns/zones
+
+  registry:
+    image: goharbor/harbor-core:v2.11.0
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    depends_on:
+      mgmt-db:
+        condition: service_healthy
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_REGISTRY_HTTPS_PORT:-443}:8443
+    volumes:
+      - ./docker/registry/harbor.yml:/etc/harbor/harbor.yml:ro
+      - certs:/etc/harbor/certs
+      - registry-data:/storage
+
+  otel-gateway:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    networks:
+      - mgmt-net
+    ports:
+      - ${COMPOSE_OTEL_GRPC_PORT:-4317}:4317
+      - ${COMPOSE_OTEL_HTTP_PORT:-4318}:4318
+    volumes:
+      - ./docker/otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+
+networks:
+  mgmt-net:
+    driver: bridge
+
+volumes:
+  db-data:
+  registry-data:
+  certs:

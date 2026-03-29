@@ -89,6 +89,17 @@ services:
       - db
       - minio
 
+  dns:
+    build:
+      context: .
+      dockerfile: ./docker/dns/Dockerfile
+    ports:
+      - ${COMPOSE_DNS_PORT:-1053}:53/tcp
+      - ${COMPOSE_DNS_PORT:-1053}:53/udp
+    volumes:
+      - ./docker/dns/Corefile:/etc/coredns/Corefile
+      - ./docker/dns/zones:/etc/coredns/zones
+
   minio:
     image: minio/minio:latest
     environment:

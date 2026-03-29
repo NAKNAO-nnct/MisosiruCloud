@@ -872,7 +872,7 @@ source "proxmox-iso" "base-ubuntu" {
   disks {
     type         = "scsi"
     disk_size    = "2G"
-    storage_pool = "local-lvm"
+    storage_pool = "ceph-pool"
   }
 
   network_adapters {
@@ -881,7 +881,7 @@ source "proxmox-iso" "base-ubuntu" {
   }
 
   cloud_init             = true
-  cloud_init_storage_pool = "local-lvm"
+  cloud_init_storage_pool = "ceph-pool"
 
   http_directory = "http"
   boot_command = [
