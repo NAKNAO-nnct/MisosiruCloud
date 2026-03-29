@@ -5,15 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Vm;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\DestroyVmJob;
 use App\Repositories\VmMetaRepository;
-use App\Services\VmService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 class DestroyController extends Controller
 {
     public function __construct(
-        private readonly VmService $vmService,
         private readonly VmMetaRepository $vmMetaRepository,
     ) {
     }
@@ -21,8 +20,8 @@ class DestroyController extends Controller
     public function __invoke(Request $request, int $vmid): RedirectResponse
     {
         $meta = $this->vmMetaRepository->findByVmidOrFail($vmid);
-        $this->vmService->terminateVm($meta);
+        DestroyVmJob::dispatch($meta->getId());
 
-        return redirect()->route('vms.index')->with('success', 'VMを削除しました。');
+        return redirect()->route('vms.index')->with('success', 'VM削除ジョブを開始しました。');
     }
 }

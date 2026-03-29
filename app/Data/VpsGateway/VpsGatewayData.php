@@ -125,4 +125,24 @@ final readonly class VpsGatewayData
     {
         return $this->createdAt;
     }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'global_ip' => $this->globalIp,
+            'wireguard_ip' => $this->wireguardIp,
+            'wireguard_port' => $this->wireguardPort,
+            'wireguard_public_key' => $this->wireguardPublicKey,
+            'transit_wireguard_port' => $this->transitWireguardPort,
+            'status' => $this->status,
+            'purpose' => $this->purpose,
+            'metadata' => $this->metadata,
+            'created_at' => $this->createdAt?->format('Y-m-d H:i:s'),
+        ];
+    }
 }

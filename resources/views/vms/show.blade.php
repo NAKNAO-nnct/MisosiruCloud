@@ -1,4 +1,18 @@
 <x-layouts::app :title="__('VM 詳細')">
+    @php
+        $provisioningStatus = $meta?->getProvisioningStatus();
+        $isProvisioning = in_array($provisioningStatus?->value, ['pending', 'cloning', 'configuring', 'starting'], true);
+        $isProvisioningError = $provisioningStatus?->value === 'error';
+    @endphp
+
+    @if ($isProvisioning)
+        <script>
+            setTimeout(function () {
+                window.location.reload();
+            }, 5000);
+        </script>
+    @endif
+
     <div class="flex flex-col gap-6">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -15,6 +29,21 @@
         @if (session('success'))
             <flux:callout variant="success" icon="circle-check">
                 {{ session('success') }}
+            </flux:callout>
+        @endif
+
+        @if ($isProvisioning)
+            <flux:callout variant="warning" icon="arrow-path">
+                プロビジョニング中です。5秒ごとに自動更新しています。
+            </flux:callout>
+        @endif
+
+        @if ($isProvisioningError)
+            <flux:callout variant="danger" icon="x-circle">
+                VM のプロビジョニングに失敗しました。
+                @if ($meta?->getProvisioningError())
+                    {{ $meta->getProvisioningError() }}
+                @endif
             </flux:callout>
         @endif
 
@@ -79,13 +108,27 @@
             <flux:heading size="lg" class="mb-4">操作</flux:heading>
             <div class="flex flex-wrap gap-2">
                 @if ($meta)
+                    @if ($isProvisioningError)
+                        <flux:button
+                            href="{{ route('vms.create', [
+                                'tenant_id' => $meta->getTenantId(),
+                                'label' => $meta->getLabel(),
+                                'node' => $meta->getProxmoxNode(),
+                                'new_vmid' => $meta->getProxmoxVmid(),
+                                'purpose' => $meta->getPurpose(),
+                            ]) }}"
+                            variant="primary"
+                        >
+                            再試行
+                        </flux:button>
+                    @endif
                     <form method="POST" action="{{ route('vms.start', $meta->getProxmoxVmid()) }}">
                         @csrf
                         <flux:button type="submit" variant="primary">起動</flux:button>
                     </form>
                     <form method="POST" action="{{ route('vms.stop', $meta->getProxmoxVmid()) }}">
                         @csrf
-                        <flux:button type="submit" variant="warning">停止</flux:button>
+                        <flux:button type="submit" variant="primary" color="amber">停止</flux:button>
                     </form>
                     <form method="POST" action="{{ route('vms.reboot', $meta->getProxmoxVmid()) }}">
                         @csrf

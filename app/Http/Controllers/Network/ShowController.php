@@ -25,8 +25,9 @@ class ShowController extends Controller
         $tenantData = $this->tenantRepository->findByIdOrFail($tenant);
         $vms = $this->vmMetaRepository->findByTenantId($tenantData->getId());
 
-        $network = collect($this->networkService->listNetworks())
-            ->firstWhere('tenant_id', $tenantData->getId());
+        $networkData = collect($this->networkService->listNetworks())
+            ->first(fn ($network) => $network->getTenantId() === $tenantData->getId());
+        $network = $networkData?->toArray();
 
         return view('networks.show', [
             'tenant' => $tenantData,

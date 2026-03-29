@@ -17,7 +17,7 @@ class ShowController extends Controller
 
     public function __invoke(Request $request, int $vmid): View
     {
-        $data = $this->vmService->getVmWithMeta($vmid);
+        $data = $this->vmService->getVmWithMeta($vmid)->toArray();
 
         return view('vms.show', $data);
     }

@@ -128,7 +128,7 @@ func (h *Handler) forwardRequest(w http.ResponseWriter, r *http.Request, bucket,
 		// Regular object operation: /bucket/key
 		backendReqURL = fmt.Sprintf("%s/%s/%s", h.backendURL, bucket, key)
 	}
-	
+
 	if rawQuery != "" {
 		backendReqURL += "?" + rawQuery
 	}

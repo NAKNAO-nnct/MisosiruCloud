@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Data\Tenant\TenantData;
+use App\Data\Vm\VmDetailResponseData;
 use App\Data\Vm\VmMetaData;
 use App\Enums\VmStatus;
 use App\Lib\Proxmox\ProxmoxApi;
@@ -46,19 +47,16 @@ class VmService
         return $vms;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    public function getVmWithMeta(int $vmid): array
+    public function getVmWithMeta(int $vmid): VmDetailResponseData
     {
         $meta = $this->vmMetaRepository->findByVmidWithTenant($vmid);
 
         if (!$this->api) {
-            return [
+            return VmDetailResponseData::make([
                 'meta' => $meta,
                 'status' => null,
                 'node' => $meta?->getProxmoxNode(),
-            ];
+            ]);
         }
 
         $node = $meta?->getProxmoxNode();
@@ -77,11 +75,11 @@ class VmService
             }
         }
 
-        return [
+        return VmDetailResponseData::make([
             'meta' => $meta,
             'status' => $vmStatus,
             'node' => $node,
-        ];
+        ]);
     }
 
     /**

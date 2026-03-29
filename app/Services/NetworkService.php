@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Data\Network\NetworkData;
 use App\Data\Tenant\TenantData;
 use App\Lib\Proxmox\ProxmoxApi;
 use App\Repositories\TenantRepository;
@@ -21,7 +22,7 @@ class NetworkService
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array<int, NetworkData>
      */
     public function listNetworks(): array
     {
@@ -44,7 +45,7 @@ class NetworkService
             $vnetName = $tenant->getVnetName();
             $matched = $vnetName ? ($vnets[$vnetName] ?? null) : null;
 
-            $rows[] = [
+            $rows[] = NetworkData::make([
                 'tenant_id' => $tenant->getId(),
                 'tenant_name' => $tenant->getName(),
                 'tenant_slug' => $tenant->getSlug(),
@@ -53,7 +54,7 @@ class NetworkService
                 'network_cidr' => $tenant->getNetworkCidr(),
                 'proxmox_zone' => is_array($matched) ? ($matched['zone'] ?? null) : null,
                 'exists_on_proxmox' => is_array($matched),
-            ];
+            ]);
         }
 
         return $rows;

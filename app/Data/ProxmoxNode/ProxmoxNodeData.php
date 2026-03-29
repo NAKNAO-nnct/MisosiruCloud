@@ -30,10 +30,27 @@ final readonly class ProxmoxNodeData
             name: $model->name,
             hostname: $model->hostname,
             apiTokenId: $model->api_token_id,
-            apiTokenSecret: $model->api_token_secret_encrypted,
+            apiTokenSecret: (string) $model->api_token_secret_encrypted,
             snippetApiUrl: $model->snippet_api_url,
-            snippetApiToken: $model->snippet_api_token_encrypted,
+            snippetApiToken: (string) $model->snippet_api_token_encrypted,
             isActive: (bool) $model->is_active,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    public static function make(array $attributes): self
+    {
+        return new self(
+            id: (int) ($attributes['id'] ?? 0),
+            name: (string) ($attributes['name'] ?? ''),
+            hostname: (string) ($attributes['hostname'] ?? ''),
+            apiTokenId: (string) ($attributes['api_token_id'] ?? ''),
+            apiTokenSecret: (string) ($attributes['api_token_secret_encrypted'] ?? ''),
+            snippetApiUrl: (string) ($attributes['snippet_api_url'] ?? ''),
+            snippetApiToken: (string) ($attributes['snippet_api_token_encrypted'] ?? ''),
+            isActive: (bool) ($attributes['is_active'] ?? false),
         );
     }
 
@@ -75,5 +92,22 @@ final readonly class ProxmoxNodeData
     public function isActive(): bool
     {
         return $this->isActive;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'hostname' => $this->hostname,
+            'api_token_id' => $this->apiTokenId,
+            'api_token_secret_encrypted' => $this->apiTokenSecret,
+            'snippet_api_url' => $this->snippetApiUrl,
+            'snippet_api_token_encrypted' => $this->snippetApiToken,
+            'is_active' => $this->isActive,
+        ];
     }
 }

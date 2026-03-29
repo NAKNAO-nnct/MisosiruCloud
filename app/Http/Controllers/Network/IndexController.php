@@ -17,7 +17,9 @@ class IndexController extends Controller
 
     public function __invoke(Request $request): View
     {
-        $networks = $this->networkService->listNetworks();
+        $networks = collect($this->networkService->listNetworks())
+            ->map(fn ($network) => $network->toArray())
+            ->all();
 
         return view('networks.index', compact('networks'));
     }

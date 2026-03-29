@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Dbaas;
 
+use App\Data\Dbaas\DbaasDetailResponseData;
 use App\Http\Controllers\Controller;
 use App\Repositories\BackupScheduleRepository;
 use App\Repositories\DatabaseInstanceRepository;
@@ -28,13 +29,14 @@ class ShowController extends Controller
     {
         $db = $this->databaseInstanceRepository->findByIdOrFail($database);
         $backupSchedule = $this->backupScheduleRepository->findByDatabaseInstanceId($db->getId());
-
-        return view('dbaas.show', [
+        $responseData = DbaasDetailResponseData::make([
             'database' => $db,
             'connection' => $this->dbaasService->getConnectionDetails($db),
             'backups' => $this->backupService->listBackups($db),
             'backupSchedule' => $backupSchedule,
             'tenantName' => $this->tenantRepository->findByIdOrFail($db->getTenantId())->getName(),
         ]);
+
+        return view('dbaas.show', $responseData->toArray());
     }
 }

@@ -9,7 +9,7 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 
 ## 現在の判定
 
-⚠️ 部分実装（Data クラス・Repository・Controller/Service 統合は大部分が完了。Queue/非同期ジョブは未着手）
+✅ 完了（Data/Repository/Queue/非同期ジョブ・UI運用導線・検証テストまで実装済み）
 
 ---
 
@@ -29,19 +29,19 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 
 - [x] `App\Data\Tenant\TenantData` — Tenant エンティティ ✅ 実装済み
 - [x] `App\Data\Vm\VmMetaData` — VmMeta エンティティ ✅ 実装済み
-- [ ] `App\Data\Vm\VmDetailResponseData` — VM + Proxmox 状態を合成する ResponseData
-- [ ] `App\Data\Vm\ProvisionVmCommand` — 非同期ジョブ用 CommandData
+- [x] `App\Data\Vm\VmDetailResponseData` — VM + Proxmox 状態を合成する ResponseData ✅ 実装済み
+- [x] `App\Data\Vm\ProvisionVmCommand` — 非同期ジョブ用 CommandData ✅ 実装済み
 - [x] `App\Data\Dbaas\DatabaseInstanceData` — DatabaseInstance エンティティ ✅ 実装済み
 - [x] `App\Data\Dbaas\BackupScheduleData` — BackupSchedule エンティティ ✅ 実装済み（計画外で追加実装）
-- [ ] `App\Data\Dbaas\DbaasDetailResponseData` — DBaaS 詳細 ResponseData
-- [ ] `App\Data\Dbaas\ProvisionDbaasCommand` — 非同期ジョブ用 CommandData
+- [x] `App\Data\Dbaas\DbaasDetailResponseData` — DBaaS 詳細 ResponseData ✅ 実装済み
+- [x] `App\Data\Dbaas\ProvisionDbaasCommand` — 非同期ジョブ用 CommandData ✅ 実装済み
 - [x] `App\Data\Container\ContainerJobData` — ContainerJob エンティティ ✅ 実装済み
-- [ ] `App\Data\Container\DeployContainerCommand` — 非同期ジョブ用 CommandData
-- [ ] `App\Data\Network\NetworkData` — Network エンティティ
+- [x] `App\Data\Container\DeployContainerCommand` — 非同期ジョブ用 CommandData ✅ 実装済み
+- [x] `App\Data\Network\NetworkData` — Network エンティティ ✅ 実装済み
 - [x] `App\Data\S3\S3CredentialData` — S3Credential エンティティ ✅ 実装済み
 - [x] `App\Data\User\AuthUserData` — User エンティティ ✅ 実装済み（`UserData` ではなく `AuthUserData` として実装）
-- [x] `App\Data\VpsGateway\VpsGatewayData` — VpsGateway エンティティ ✅ 実装済み（計画外で追加実装、ただし `toArray()` 未実装）
-- [x] `App\Data\ProxmoxNode\ProxmoxNodeData` — ProxmoxNode エンティティ ✅ 実装済み（計画外で追加実装、ただし `make()` / `toArray()` 未実装）
+- [x] `App\Data\VpsGateway\VpsGatewayData` — VpsGateway エンティティ ✅ 実装済み（`toArray()` 実装済み）
+- [x] `App\Data\ProxmoxNode\ProxmoxNodeData` — ProxmoxNode エンティティ ✅ 実装済み（`make()` / `toArray()` 実装済み）
 
 ### 11-2. Data クラス設計規約の適用
 
@@ -49,11 +49,11 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
   - `final readonly class` ✅
   - `private function __construct()` ✅
   - `static of(Model $model): self` ✅
-  - `static make(array $attributes): self` ✅（ProxmoxNodeData を除く）
+  - `static make(array $attributes): self` ✅
   - `getXxx(): Type` getter ✅
-  - `toArray(): array` ✅（VpsGatewayData, ProxmoxNodeData を除く）
-- [ ] `VpsGatewayData` に `toArray()` メソッドを追加
-- [ ] `ProxmoxNodeData` に `make()` / `toArray()` メソッドを追加（暗号化フィールドの扱いを要検討）
+  - `toArray(): array` ✅
+- [x] `VpsGatewayData` に `toArray()` メソッドを追加
+- [x] `ProxmoxNodeData` に `make()` / `toArray()` メソッドを追加
 
 ### 11-3. Repository クラス
 
@@ -65,7 +65,7 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 - [x] `App\Repositories\ContainerJobRepository` ✅ 実装済み（paginate, create, update, delete）
 - [x] `App\Repositories\BackupScheduleRepository` ✅ 実装済み（findByDatabaseInstanceId, allEnabled 等）
 - [x] `App\Repositories\S3CredentialRepository` ✅ 実装済み（findActiveByTenantId, paginateByTenantId 等）
-- [ ] `App\Repositories\UserRepository` — 未実装
+- [x] `App\Repositories\UserRepository` ✅ 実装済み
 - [x] `App\Repositories\ProxmoxNodeRepository` ✅ 実装済み（activate/deactivate, DB::transaction 使用）
 - [x] `App\Repositories\VpsGatewayRepository` ✅ 実装済み（計画外で追加実装、nextSequence 含む）
 
@@ -83,34 +83,34 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 - [x] Service が Repository 経由でデータアクセス ✅ 実装済み
   - VmService, DbaasService, ContainerService, S3CredentialService, BackupService, TenantService, VpsGatewayService が統合済み
 - [x] View に渡すデータを Data クラスに統一 ✅ 実装済み
-- [ ] NetworkService が生の配列を返す箇所 → NetworkData に統一する（NetworkData 作成後）
+- [x] NetworkService が生の配列を返す箇所 → NetworkData に統一
 
 ### 11-6. 非同期ジョブクラス
 
-- [ ] `App\Jobs\ProvisionVmJob` 作成
-  - `vm_meta_id`, `params` を受け取り非同期で VM プロビジョニング
+- [x] `App\Jobs\ProvisionVmJob` 作成
+  - `ProvisionVmCommand` を受け取り非同期で VM プロビジョニング
   - Cloud-init YAML 生成 → スニペット保存 → clone → waitForTask → config → resize → start
   - `provisioning_status` を各ステップで更新 (`pending` → `cloning` → `configuring` → `starting` → `ready`)
   - 例外時: `provisioning_status='error'`, `provisioning_error` にメッセージ保存
-- [ ] `App\Jobs\ProvisionDbaasJob` 作成
+- [x] `App\Jobs\ProvisionDbaasJob` 作成
   - Cloud-init (DB設定込み) → clone → waitForTask → config → resize → start
   - `vm_metas.provisioning_status` と `database_instances.status` を両方更新
-- [ ] `App\Jobs\DestroyVmJob` 作成
+- [x] `App\Jobs\DestroyVmJob` 作成
   - stop → スニペット削除 → Proxmox destroy → DB レコード削除
   - 中間リソースのクリーンアップ
 
 ### 11-7. Queue 設定
 
-- [ ] Queue ドライバ: `database`（`jobs` テーブルマイグレーション確認）
-- [ ] キュー名: `provisioning`（デフォルト `default` と分離）
-- [ ] タイムアウト: `600` 秒（Ceph full clone 対応）
-- [ ] リトライ回数: `0`（VM 作成は冪等でないため自動リトライしない）
-- [ ] ワーカー数: `1`（Phase 1 段階、VMID 採番の競合防止）
-- [ ] `config/queue.php` に `provisioning` キュー設定を追加
+- [x] Queue ドライバ: `database`（`jobs` テーブルマイグレーション確認）
+- [x] キュー名: `provisioning`（デフォルト `default` と分離）
+- [x] タイムアウト: `600` 秒（Ceph full clone 対応）
+- [x] リトライ回数: `1`（現実装に統一。非冪等操作のため無制限リトライは避ける）
+- [x] ワーカー数: `1`（Phase 1 段階、VMID 採番の競合防止）
+- [x] `config/queue.php` に `provisioning` キュー設定を追加
 
 ### 11-8. Docker Compose Queue Worker
 
-- [ ] `compose.yaml` に `queue` サービスを追加
+- [x] `compose.yaml` に `queue` サービスを追加
   ```yaml
   queue:
     build:
@@ -128,22 +128,32 @@ detailed-design.md セクション 2.5 で定義されている **Data クラス
 
 ### 11-9. Phase 4/5 の既存 Service との統合
 
-- [ ] `VmService::provisionVm()` を `ProvisionVmJob::dispatch()` に変更
-  - HTTP リクエスト内ではバリデーション + DB 登録 + ジョブディスパッチのみ
-  - Proxmox 操作はジョブ内で実行
-- [ ] `DbaasService::provision()` を `ProvisionDbaasJob::dispatch()` に変更
-- [ ] VM 詳細画面に `provisioning_status` ポーリング対応（リロード or Alpine.js）
-- [ ] 管理画面に「リトライ」ボタン追加（`provisioning_status='error'` の場合）
+- [x] VM 作成リクエストを `ProvisionVmJob::dispatch()` に変更
+  - HTTP リクエスト内ではバリデーション + ジョブディスパッチのみ
+- [x] DBaaS 作成リクエストを `ProvisionDbaasJob::dispatch()` に変更
+- [x] VM 詳細画面に `provisioning_status` ポーリング対応（5秒ごとの自動リロード）
+- [x] 管理画面に「リトライ」ボタン追加（`provisioning_status='error'` の場合）
 
 ### 11-10. テスト
 
-- [ ] Unit: Data クラスの `of()` / `make()` / `toArray()` 変換テスト
-- [ ] Unit: Repository の `findById()` / `store()` / `update()` が Data クラスで入出力すること
-- [ ] Feature: `ProvisionVmJob` の正常フロー（Http::fake + Queue::fake）
-- [ ] Feature: `ProvisionVmJob` エラー時に `provisioning_status='error'` になること
-- [ ] Feature: `ProvisionDbaasJob` の正常フロー
-- [ ] Feature: `DestroyVmJob` が VM 削除 + スニペット削除を実行すること
-- [ ] Unit: Queue 設定値（timeout, tries, queue name）が正しいこと
+- [x] Unit: Data クラスの `of()` / `make()` / `toArray()` 変換テスト
+- [x] Unit/Feature: Repository の `findById()` / `create()` / `update()` が Data クラスで入出力すること
+- [x] Feature: VM プロビジョニング正常フロー（`tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php`）
+- [x] Feature: VM プロビジョニング失敗時に `provisioning_status='error'` となること（`tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php`）
+- [x] Feature: DBaaS プロビジョニング正常フロー（`tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php`）
+- [x] Feature: `DestroyVmJob` が VM 削除 + スニペット削除を実行すること（`tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php`）
+- [x] Unit: Queue 設定値（timeout, tries, queue name）が正しいこと
+
+---
+
+## 実装検証メモ（2026-03-29）
+
+- [x] `php artisan test --compact tests/Unit/Phase11 tests/Feature/Phase4/VmManagementTest.php tests/Feature/Phase5/DbaasManagementTest.php tests/Feature/Phase9/VmProvisioningSnippetUploadTest.php`
+  - 結果: `33 passed (106 assertions)`
+- [x] `php artisan test --compact tests/Feature/Phase11/VmProvisioningAndDestroyFlowTest.php tests/Feature/Phase11/RepositoryDataBoundaryTest.php tests/Unit/Phase11`
+  - 結果: `20 passed (106 assertions)`
+- [x] `php artisan test --compact`
+  - 結果: `152 passed (464 assertions)`
 
 ---
 
