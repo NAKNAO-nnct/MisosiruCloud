@@ -806,15 +806,14 @@ Proxmox テンプレート (Read-Only) として保存する。
 
 ```
 packer/
-├── base-ubuntu.pkr.hcl          # ベーステンプレート定義
+├── base-ubuntu.pkr.hcl          # ベーステンプレート定義 (proxmox-clone)
 ├── dbaas-mysql.pkr.hcl          # MySQL DBaaS テンプレート
 ├── dbaas-postgres.pkr.hcl       # PostgreSQL DBaaS テンプレート
 ├── dbaas-redis.pkr.hcl          # Redis DBaaS テンプレート
 ├── nomad-worker.pkr.hcl         # Nomad Worker テンプレート
 ├── variables.pkr.hcl            # 共通変数定義
-├── http/
-│   └── user-data                # Packer ビルド用の初回 cloud-init (autoinstall)
 └── scripts/
+    ├── import-cloud-image.sh    # Cloud image ダウンロード & シードテンプレート作成
     ├── base.sh                  # 共通セットアップ (ユーザ, SSH, timezone, DNS, node_exporter)
     ├── cleanup.sh               # テンプレート化前のクリーンアップ
     ├── mysql.sh                 # MySQL インストール + 初期設定
@@ -827,7 +826,8 @@ packer/
 
 | テンプレート名 | VMID 範囲 | ベース | Packer でインストールするもの |
 |-------------|----------|--------|---------------------------|
-| base-ubuntu | 9000 | Ubuntu 24.04 cloud image | qemu-guest-agent, node_exporter, 共通ユーザ設定 |
+| seed-ubuntu | 8999 | Ubuntu 24.04 cloud image (.img) | なし（素の cloud image） |
+| base-ubuntu | 9000 | seed-ubuntu クローン | qemu-guest-agent, node_exporter, 共通ユーザ設定 |
 | dbaas-mysql | 9010 | base-ubuntu クローン | MySQL 8.4 パッケージ |
 | dbaas-postgres | 9011 | base-ubuntu クローン | PostgreSQL 17 パッケージ |
 | dbaas-redis | 9012 | base-ubuntu クローン | Redis 7.x パッケージ |
@@ -837,7 +837,54 @@ packer/
 > - **Packer (ビルド時):** パッケージインストール、バイナリ配置など**時間がかかる共通処理**
 > - **Cloud-init (デプロイ時):** IP 設定、DB ユーザ/パスワード作成、テナント固有設定など**インスタンス固有の処理**
 
-### 7.4 Packer テンプレート例 (base-ubuntu)
+### 7.4 シードテンプレート作成 (import-cloud-image.sh)
+
+Packer ビルドの前提として、Ubuntu 24.04 cloud image を Proxmox にインポートした「シードテンプレート」を作成する。
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+SEED_VMID=${SEED_VMID:-8999}
+STORAGE_POOL=${STORAGE_POOL:-ceph-pool}
+CLOUD_IMAGE_URL=${CLOUD_IMAGE_URL:-https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img}
+
+# 既存チェック
+if qm status "$SEED_VMID" &>/dev/null; then
+  echo "Seed template $SEED_VMID already exists. Skipping."
+  exit 0
+fi
+
+# Cloud image ダウンロード
+wget -O /tmp/noble-server-cloudimg-amd64.img "$CLOUD_IMAGE_URL"
+
+# VM 作成 & ディスクインポート
+qm create "$SEED_VMID" \
+  --name tmpl-seed-ubuntu \
+  --ostype l26 \
+  --cpu cputype=host \
+  --cores 2 \
+  --memory 2048 \
+  --agent enabled=1 \
+  --net0 virtio,bridge=vmbr0 \
+  --scsihw virtio-scsi-single \
+  --serial0 socket \
+  --vga serial0
+
+qm importdisk "$SEED_VMID" /tmp/noble-server-cloudimg-amd64.img "$STORAGE_POOL"
+qm set "$SEED_VMID" --scsi0 "$STORAGE_POOL:vm-${SEED_VMID}-disk-0,discard=on,iothread=1"
+qm set "$SEED_VMID" --ide2 "$STORAGE_POOL:cloudinit"
+qm set "$SEED_VMID" --boot order=scsi0
+qm template "$SEED_VMID"
+
+rm -f /tmp/noble-server-cloudimg-amd64.img
+echo "Seed template $SEED_VMID created successfully."
+```
+
+### 7.5 Packer テンプレート例 (base-ubuntu)
+
+> シードテンプレート (8999) を `proxmox-clone` でクローンし、共通プロビジョニングを実行する。
+> ISO + autoinstall は不要——cloud image は既に OS インストール済みで、cloud-init 対応済み。
 
 ```hcl
 # base-ubuntu.pkr.hcl
@@ -850,16 +897,14 @@ packer {
   }
 }
 
-source "proxmox-iso" "base-ubuntu" {
+source "proxmox-clone" "base-ubuntu" {
   proxmox_url              = var.proxmox_url
   username                 = var.proxmox_username
   token                    = var.proxmox_token
   node                     = var.proxmox_node
   insecure_skip_tls_verify = true
 
-  iso_file    = "local:iso/ubuntu-24.04-live-server-amd64.iso"
-  unmount_iso = true
-
+  clone_vm_id          = var.seed_vmid   # 8999 (シードテンプレート)
   vm_id                = 9000
   vm_name              = "tmpl-base-ubuntu"
   template_description = "Base Ubuntu 24.04 template (Packer built)"
@@ -868,37 +913,13 @@ source "proxmox-iso" "base-ubuntu" {
   cores  = 2
   memory = 2048
 
-  scsi_controller = "virtio-scsi-single"
-  disks {
-    type         = "scsi"
-    disk_size    = "2G"
-    storage_pool = "ceph-pool"
-  }
-
-  network_adapters {
-    model  = "virtio"
-    bridge = "vmbr0"
-  }
-
-  cloud_init             = true
-  cloud_init_storage_pool = "ceph-pool"
-
-  http_directory = "http"
-  boot_command = [
-    "<esc><wait>",
-    "e<down><down><down><end>",
-    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/",
-    "<F10>"
-  ]
-  boot_wait = "5s"
-
-  ssh_username = "packer"
+  ssh_username = var.ssh_username   # "ubuntu" (cloud image デフォルト)
   ssh_password = var.ssh_password
-  ssh_timeout  = "15m"
+  ssh_timeout  = "10m"
 }
 
 build {
-  sources = ["source.proxmox-iso.base-ubuntu"]
+  sources = ["source.proxmox-clone.base-ubuntu"]
 
   provisioner "shell" {
     scripts = [
@@ -909,7 +930,7 @@ build {
 }
 ```
 
-### 7.5 Packer テンプレート例 (dbaas-mysql)
+### 7.6 Packer テンプレート例 (dbaas-mysql)
 
 ```hcl
 # dbaas-mysql.pkr.hcl
